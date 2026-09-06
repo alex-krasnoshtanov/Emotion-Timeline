@@ -41,3 +41,6 @@ downloads/
 Thumbs.db
 .vscode/
 .idea/
+
+# Claude Code: the shared config is committed, personal overrides are not
+.claude/settings.local.json
