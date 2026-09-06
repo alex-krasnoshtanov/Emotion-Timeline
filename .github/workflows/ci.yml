@@ -6,22 +6,37 @@ on:
   pull_request:
   workflow_dispatch:
 
+# Pull requests are the point. A check that only runs after merge tells you
+# about a break you have already shipped.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
+env:
+  UV_FROZEN: "1"
+
 jobs:
+  # Formatting, linting, workflow schemas and the "never commit" guard, all of
+  # it exactly the hooks in .pre-commit-config.yaml -- so a green commit hook
+  # locally means a green job here, and neither can quietly drift from the
+  # other. The two `local` hooks that shell out to uv are excluded: mypy and
+  # pytest have jobs of their own below, with the dependencies actually
+  # installed.
   lint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v3
-      - name: Lint
-        run: uvx ruff@0.6.9 check .
-      - name: Format check
-        run: uvx ruff@0.6.9 format --check .
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: pre-commit/action@v3.0.1
+        env:
+          SKIP: mypy,figures-current
 
-  test:
+  types:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -31,14 +46,59 @@ jobs:
       - uses: astral-sh/setup-uv@v3
         with:
           enable-cache: true
-          cache-dependency-glob: pyproject.toml
-      # Core plus dev only. The `model` and `stt` extras pull torch and a
-      # paid API client; nothing under tests/ needs either, and installing
-      # them would take the job from under a minute to several.
+          cache-dependency-glob: uv.lock
+      - name: Install
+        run: uv sync --extra dev
+      - name: Type check
+        run: uv run mypy
+
+  # Three combinations rather than a full matrix: the oldest supported Python,
+  # the newest, and Windows -- which is where the figures are generated, and
+  # therefore where a path or an encoding assumption would show up first.
+  test:
+    name: test (${{ matrix.os }}, py${{ matrix.python }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, python: "3.12" }
+          - { os: ubuntu-latest, python: "3.13" }
+          - { os: windows-latest, python: "3.12" }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      # Core plus dev only. The `model` and `stt` extras pull torch and a paid
+      # API client; nothing under tests/ needs either, and installing them would
+      # take the job from under a minute to several.
       - name: Install
         run: uv pip install --system -e ".[dev]"
+      # --cov reads its floor from [tool.coverage.report] in pyproject.toml, so
+      # the gate is the same number locally and here. A stage that lands without
+      # a test drags the total under it and fails this job.
       - name: Test
-        run: pytest
+        run: pytest --cov --cov-report=term-missing --cov-report=xml
+      - name: Coverage summary
+        if: always() && matrix.os == 'ubuntu-latest' && matrix.python == '3.12'
+        run: |
+          python - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import xml.etree.ElementTree as ET
+          root = ET.parse("coverage.xml").getroot()
+          print(f"### Coverage: {float(root.get('line-rate', 0)) * 100:.1f}% of lines\n")
+          print("| Module | Lines | Missed |")
+          print("| --- | ---: | ---: |")
+          for cls in sorted(root.iter("class"), key=lambda c: c.get("filename") or ""):
+              lines = cls.find("lines")
+              rows = list(lines) if lines is not None else []
+              missed = sum(1 for line in rows if line.get("hits") == "0")
+              print(f"| `{cls.get('filename')}` | {len(rows)} | {missed} |")
+          PY
 
   # The README figures are generated from committed statistics, so they can go
   # stale silently. Each PNG records the SHA-256 of the report it was drawn
@@ -55,8 +115,20 @@ jobs:
       - uses: astral-sh/setup-uv@v3
         with:
           enable-cache: true
-          cache-dependency-glob: pyproject.toml
+          cache-dependency-glob: uv.lock
       - name: Install
         run: uv pip install --system -e ".[dev]"
       - name: Figures match the data they claim to show
         run: emotion-timeline figures --out assets --check
+
+  # One required check to protect the branch with, so adding a matrix entry
+  # later does not mean editing the branch protection rule.
+  ci:
+    if: always()
+    needs: [lint, types, test, figures]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Every job succeeded
+        run: |
+          echo '${{ toJSON(needs) }}'
+          test -z "$(echo '${{ toJSON(needs) }}' | grep '"result"' | grep -v success)"

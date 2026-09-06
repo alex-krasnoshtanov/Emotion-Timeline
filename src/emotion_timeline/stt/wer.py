@@ -109,7 +109,7 @@ def score(frame: pd.DataFrame, system: str | None = None) -> WerResult:
     name = system or frame.attrs.get("system", "unnamed")
     if frame.empty:
         return WerResult(name, 0, 0, 0, 0, 0, 0.0, 0.0)
-    tokens = int(frame["hypothesis"].str.split().str.len().sum())
+    tokens = sum(len(str(text).split()) for text in frame["hypothesis"])
     return WerResult(
         system=name,
         segments=len(frame),

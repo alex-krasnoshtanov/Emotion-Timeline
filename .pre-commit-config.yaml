@@ -1,0 +1,81 @@
+# Everything CI enforces, run before the commit exists.
+#
+#   uv run pre-commit install --install-hooks --hook-type pre-push
+#
+# The lint job in CI is literally `pre-commit run --all-files`, so the two
+# cannot drift: a hook added here is enforced on every pull request, and a green
+# commit hook means a green lint job.
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: mixed-line-ending
+        args: [--fix=lf]
+      - id: check-yaml
+      - id: check-toml
+      - id: check-json
+      - id: check-merge-conflict
+      - id: check-case-conflict
+      - id: detect-private-key
+      - id: debug-statements
+      # This repository is meant to stay clonable in seconds. The upstream
+      # coursework carries ~700 MB of downloaded audio; the largest thing here
+      # is a 60 KB figure.
+      - id: check-added-large-files
+        args: [--maxkb=1024]
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.6
+    hooks:
+      - id: ruff-check
+        args: [--fix]
+      - id: ruff-format
+
+  - repo: https://github.com/python-jsonschema/check-jsonschema
+    rev: 0.38.0
+    hooks:
+      - id: check-github-workflows
+
+  - repo: local
+    hooks:
+      # The "never commit" list in CLAUDE.md, made mechanical. Client-supplied
+      # transcripts, downloaded media, the rebuilt dataset and model weights all
+      # have somewhere else to live; none of them belong in git history, where
+      # removing them later means rewriting it.
+      - id: no-third-party-or-heavy-artefacts
+        name: refuse client material, media, datasets and weights
+        language: fail
+        entry: >-
+          this file must not be committed - see "Never commit" in CLAUDE.md.
+          Client transcripts stay out entirely; media, datasets and weights are
+          regenerated or ship as release assets.
+        files: '(?i)(\.(xlsx|xls|mp3|mp4|wav|parquet|pt|pth|bin|safetensors)$|^data/|^models/)'
+
+      - id: mypy
+        name: mypy (strict)
+        language: system
+        entry: uv run mypy
+        types: [python]
+        pass_filenames: false
+
+      # Figures are drawn from the committed statistics and carry the digest of
+      # the report they came from, so they can go stale silently. This is the
+      # same check CI runs.
+      - id: figures-current
+        name: figures match the data they claim to show
+        language: system
+        entry: uv run emotion-timeline figures --out assets --check
+        pass_filenames: false
+        files: '^(assets/|benchmarks/error-analysis/|src/emotion_timeline/analysis/)'
+
+      # On push rather than on commit: the suite takes a few seconds, which is
+      # fine before a push and irritating on every commit.
+      - id: pytest
+        name: pytest, with the coverage floor
+        language: system
+        entry: uv run pytest --cov
+        pass_filenames: false
+        stages: [pre-push]

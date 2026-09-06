@@ -43,6 +43,14 @@ So when you add a result:
 - **CI runs on pull requests, not only on `main`.** The sibling repo DSL-Learning
   gets this wrong: its frontend compiles only in the image build on `main`, so a
   breaking change passes review and fails after merge.
+- **A stage cannot land without tests.** Coverage carries a 95% floor
+  (`[tool.coverage.report]`), enforced by `pytest --cov` in CI. The floor is not
+  a quality score; it is there because rendering a result is easy and verifying
+  one is easy to skip, and this repository's whole claim is that its numbers are
+  checked.
+- **The command line is covered too.** Every published number is reachable by a
+  command, so `tests/test_cli.py` asserts what those commands print. If the
+  README says a command prints 0.81%, a test says so as well.
 
 ## Layout
 
@@ -63,18 +71,31 @@ tests/                the arithmetic, and the mistakes worth pinning
 
 ```bash
 uv sync --extra dev
-uv run pytest
-uvx ruff@0.6.9 check . && uvx ruff@0.6.9 format --check .
+uv run pre-commit install --install-hooks --hook-type pre-push   # once
+
+uv run pytest --cov          # tests, with the 95% floor applied
+uv run mypy                  # strict, over src/ and tests/
+uv run pre-commit run --all-files   # everything the lint job runs
 
 uv run emotion-timeline wer --window 0:00-18:09   # speech-to-text comparison
 uv run emotion-timeline errors                    # where the classifier fails
 uv run emotion-timeline figures --out assets      # regenerate every figure
 ```
 
+`.pre-commit-config.yaml` is the single definition of what "clean" means: the
+CI lint job is `pre-commit run --all-files`, so a hook added there is enforced on
+every pull request and the two cannot drift.
+
 ## Conventions
 
 - Python 3.12+, `uv` first, pip documented as the fallback.
 - ruff, line length 100. `filterwarnings = ["error"]` — a warning fails the suite.
+- **mypy strict**, over `src/` and `tests/` both. Optional-extra libraries with
+  no stubs are listed by name in the `[[tool.mypy.overrides]]` block rather than
+  waved through globally; add to that list as later stages pull them in.
+- Tests are named as sentences saying what must hold
+  (`test_the_window_is_what_makes_it_a_comparison`), not after the function they
+  exercise. A failing name should read as the claim that broke.
 - The **core install stays light**: numpy, pandas, matplotlib, scipy and nothing
   else. Anything needing a GPU or a paid API is an extra (`stt`, `model`,
   `demo`). Someone who only wants to read the results should not download torch.

@@ -11,7 +11,7 @@ is a semantic feature. That is the kind of thing you only find by looking at the
 6,454 failures rather than the 89.95% accuracy.
 
 [![CI](https://github.com/alex-krasnoshtanov/Emotion-Timeline/actions/workflows/ci.yml/badge.svg)](https://github.com/alex-krasnoshtanov/Emotion-Timeline/actions/workflows/ci.yml)
-[![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/downloads/)
+[![Python 3.12 | 3.13](https://img.shields.io/badge/python-3.12%20%7C%203.13-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 Built for the **Content Intelligence Agency**, who make analytics tools for media
@@ -171,6 +171,22 @@ extras: `--extra stt` for the transcriber adapters, `--extra model` for training
 `--extra demo` for the browser demo.
 
 pip works too: `pip install -e ".[dev]"`.
+
+### Working on it
+
+```bash
+uv run pre-commit install --install-hooks --hook-type pre-push
+```
+
+That is the whole setup. Formatting, linting, strict type checking and the guard
+against committing client material or model weights then run before a commit
+exists, and the test suite runs before a push. CI enforces the same set — its
+lint job *is* `pre-commit run --all-files` — so a green commit hook means a green
+pull request.
+
+Tests carry a 95% coverage floor. It is not a quality score: rendering a result
+is easy and verifying one is easy to skip, and everything this repository claims
+rests on its numbers being checked.
 
 ---
 

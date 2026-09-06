@@ -18,6 +18,16 @@ import json
 import struct
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:  # matplotlib is imported inside the figure functions only
+    from matplotlib.axes import Axes
+
+# The recorded statistics are heterogeneous JSON blocks -- an int, a float and a
+# nested dict can sit under one key -- so they stay dicts and are read by key
+# rather than growing a dataclass per block. The classes are the exception: they
+# have a fixed shape and get ClassResult.
+Stats = dict[str, Any]
 
 BENCHMARK = Path(__file__).resolve().parents[3] / "benchmarks" / "error-analysis"
 DEFAULT_REPORT = BENCHMARK / "held-out-64250.json"
@@ -55,10 +65,10 @@ class ErrorReport:
     total_errors: int
     accuracy: float
     classes: dict[str, ClassResult]
-    length: dict
-    textual_features: dict[str, dict]
+    length: Stats
+    textual_features: dict[str, Stats]
     vocabulary: dict[str, list[str]]
-    confidence: dict
+    confidence: Stats
     source: Path
     digest: str
 
@@ -205,7 +215,7 @@ def check_figures_current(report: ErrorReport, out_dir: str | Path) -> list[str]
     return problems
 
 
-def _style(ax) -> None:
+def _style(ax: Axes) -> None:
     ax.set_axisbelow(True)
     ax.grid(axis="x", color=GRID, linewidth=0.8)
     ax.tick_params(colors=MUTED, labelsize=9)

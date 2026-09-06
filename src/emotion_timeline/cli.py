@@ -59,7 +59,7 @@ def cmd_wer(args: argparse.Namespace) -> int:
     limit = min(extents.values())
     if end is None or end > limit:
         print(
-            f"note: annotation for {min(extents, key=extents.get)} stops at "
+            f"note: annotation for {min(extents, key=extents.__getitem__)} stops at "
             f"{limit / 60:.1f} min; beyond that the comparison is uneven.",
             file=sys.stderr,
         )

@@ -3,11 +3,14 @@
   "permissions": {
     "allow": [
       "Bash(uv run pytest:*)",
+      "Bash(uv run mypy:*)",
+      "Bash(uv run ruff:*)",
+      "Bash(uv run pre-commit run:*)",
+      "Bash(uv run pre-commit install:*)",
+      "Bash(uv run pre-commit autoupdate:*)",
       "Bash(uv run emotion-timeline:*)",
       "Bash(uv sync:*)",
       "Bash(uv lock:*)",
-      "Bash(uvx ruff@0.6.9 check:*)",
-      "Bash(uvx ruff@0.6.9 format:*)",
       "Bash(git status:*)",
       "Bash(git diff:*)",
       "Bash(git log:*)",

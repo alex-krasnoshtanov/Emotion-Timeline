@@ -1,0 +1,15 @@
+# LF in the repository and in the working tree, on every platform. Without this
+# a Windows checkout rewrites every text file to CRLF, the mixed-line-ending
+# hook rewrites it back, and every commit carries a whole-file diff.
+* text=auto eol=lf
+
+*.png binary
+*.pdf binary
+
+# The figures are generated; a diff of their bytes tells nobody anything. What
+# matters is the digest stamp inside them, which `emotion-timeline figures
+# --check` verifies.
+assets/*.png -diff linguist-generated
+
+# Committed evidence rather than source: keep it out of the language stats.
+benchmarks/** linguist-documentation

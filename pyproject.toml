@@ -29,7 +29,11 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest>=8.2",
-    "ruff>=0.6",
+    "pytest-cov>=5.0",
+    "ruff>=0.16",
+    "mypy>=1.11",
+    "pandas-stubs>=2.2",
+    "pre-commit>=3.8",
 ]
 stt = [
     "faster-whisper>=1.1",
@@ -83,3 +87,41 @@ select = [
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["E501"]
+
+[tool.coverage.run]
+source = ["src/emotion_timeline"]
+branch = true
+
+# 95% is roughly "every stage has its module and its command tested". It is a
+# floor rather than a target: the point is that a stage cannot land with no test
+# at all, which is the failure this project is most prone to -- results are easy
+# to render and easy to leave unverified.
+[tool.coverage.report]
+fail_under = 95
+show_missing = true
+skip_covered = true
+exclude_also = [
+    "if TYPE_CHECKING:",
+    "if __name__ == .__main__.:",
+    "raise NotImplementedError",
+]
+
+[tool.mypy]
+files = ["src", "tests"]
+python_version = "3.12"
+strict = true
+pretty = true
+
+# The optional extras are not installed in the type-checking environment, and
+# most of them ship no stubs anyway. Everything in the core install is checked
+# for real. Extend this list as the later stages land.
+[[tool.mypy.overrides]]
+module = [
+    "assemblyai.*",
+    "captum.*",
+    "datasets.*",
+    "faster_whisper.*",
+    "sklearn.*",
+    "transformers.*",
+]
+ignore_missing_imports = true

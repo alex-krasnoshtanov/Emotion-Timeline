@@ -20,7 +20,10 @@ it.
    inputs. Register it in `build_parser()`. If a reader cannot run it, it is not
    a result.
 4. **Tests** in `tests/test_<stage>.py`: the arithmetic, the published figures,
-   and any mistake worth pinning so it cannot come back.
+   and any mistake worth pinning so it cannot come back. Cover the CLI
+   subcommand as well as the module — `tests/test_cli.py` is where the printed
+   output is pinned to what the README claims it prints. Coverage carries a 95%
+   floor, so a stage that lands untested fails CI rather than passing quietly.
 5. **A docs chapter** at `docs/<stage>.md`, ending with a section saying what the
    result does **not** establish.
 6. **A README section** with the headline number, plus the roadmap checkbox
@@ -82,12 +85,19 @@ Anything needing a GPU or a paid API goes in an optional extra, and its import
 stays **inside the function that uses it**, so `import emotion_timeline` never
 pulls torch. The core install is numpy, pandas, matplotlib, scipy.
 
+A new library with no type stubs gets a line in the `[[tool.mypy.overrides]]`
+module list in `pyproject.toml`. Adding one there is a deliberate, named
+exemption; turning `ignore_missing_imports` on globally is not.
+
 ## Before you call it done
 
 ```bash
-uv run pytest
-uvx ruff@0.6.9 check . && uvx ruff@0.6.9 format --check .
+uv run pytest --cov                 # the suite, and the 95% floor
+uv run mypy                         # strict, src/ and tests/
+uv run pre-commit run --all-files   # exactly what the CI lint job runs
 uv run emotion-timeline figures --out assets && git diff --stat -- assets
 ```
 
 The last one must produce no diff. If it does, commit the regenerated figures.
+`pre-commit run --all-files` covers formatting, linting, the workflow schemas
+and the guard against committing client material, media, datasets or weights.

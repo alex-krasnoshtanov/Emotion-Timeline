@@ -1,0 +1,23 @@
+version: 2
+updates:
+  # The workflow actions. These are the updates that actually matter here: a
+  # deprecated action version fails CI without touching any code.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: "ci"
+
+  # Grouped into one pull request a month rather than one per package. This is a
+  # study repository; a stream of individual bumps would be noise, and CI is
+  # what decides whether a bump is safe.
+  - package-ecosystem: uv
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      python:
+        patterns: ["*"]
+    commit-message:
+      prefix: "deps"
