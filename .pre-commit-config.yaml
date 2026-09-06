@@ -1,6 +1,6 @@
 # Everything CI enforces, run before the commit exists.
 #
-#   uv run pre-commit install --install-hooks --hook-type pre-push
+#   uv run pre-commit install --install-hooks -t pre-commit -t pre-push
 #
 # The lint job in CI is literally `pre-commit run --all-files`, so the two
 # cannot drift: a hook added here is enforced on every pull request, and a green

@@ -175,7 +175,7 @@ pip works too: `pip install -e ".[dev]"`.
 ### Working on it
 
 ```bash
-uv run pre-commit install --install-hooks --hook-type pre-push
+uv run pre-commit install --install-hooks -t pre-commit -t pre-push
 ```
 
 That is the whole setup. Formatting, linting, strict type checking and the guard

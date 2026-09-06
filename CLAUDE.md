@@ -71,7 +71,7 @@ tests/                the arithmetic, and the mistakes worth pinning
 
 ```bash
 uv sync --extra dev
-uv run pre-commit install --install-hooks --hook-type pre-push   # once
+uv run pre-commit install --install-hooks -t pre-commit -t pre-push   # once
 
 uv run pytest --cov          # tests, with the 95% floor applied
 uv run mypy                  # strict, over src/ and tests/
