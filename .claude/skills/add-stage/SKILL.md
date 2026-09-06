@@ -89,6 +89,20 @@ A new library with no type stubs gets a line in the `[[tool.mypy.overrides]]`
 module list in `pyproject.toml`. Adding one there is a deliberate, named
 exemption; turning `ignore_missing_imports` on globally is not.
 
+## Code CI cannot run
+
+Training loops and paid-API calls will not execute on a runner, and they will
+drag the coverage total under its floor if left alone. Two rules:
+
+- Keep the untestable part **small and separate**. A `train()` that builds a
+  config, hands it to a trainer and writes a metrics file has one untestable
+  line and several testable ones — the config building, the metric arithmetic
+  and the artefact writing all get tested against fakes.
+- Mark what remains with `# pragma: no cover` **and a reason on the same line**
+  (`# pragma: no cover - needs a GPU`). Never widen `[tool.coverage.run] omit`
+  to a whole module: that hides the tested parts along with the untested ones,
+  and the floor stops meaning anything.
+
 ## Before you call it done
 
 ```bash
