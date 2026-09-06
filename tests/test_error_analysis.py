@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 from emotion_timeline.analysis import error_analysis as ea
 
@@ -51,7 +53,7 @@ def test_surface_markers_multiply_the_error_rate() -> None:
         assert ratio > 5.0  # every one of the three at least sextuples it
 
 
-def test_figures_render(tmp_path) -> None:
+def test_figures_render(tmp_path: Path) -> None:
     written = ea.render_all(ea.ErrorReport.load(), tmp_path)
     assert len(written) == len(ea.FIGURES)
     for path in written:
@@ -61,14 +63,14 @@ def test_figures_render(tmp_path) -> None:
 # --- staleness ---------------------------------------------------------------
 
 
-def test_figures_record_the_report_they_were_drawn_from(tmp_path) -> None:
+def test_figures_record_the_report_they_were_drawn_from(tmp_path: Path) -> None:
     report = ea.ErrorReport.load()
     for path in ea.render_all(report, tmp_path):
         assert ea.read_stamp(path) == report.digest
     assert ea.check_figures_current(report, tmp_path) == []
 
 
-def test_a_changed_report_makes_the_committed_figures_stale(tmp_path) -> None:
+def test_a_changed_report_makes_the_committed_figures_stale(tmp_path: Path) -> None:
     """The check has to actually fail when the numbers move underneath it."""
     report = ea.ErrorReport.load()
     ea.render_all(report, tmp_path)
@@ -83,7 +85,7 @@ def test_a_changed_report_makes_the_committed_figures_stale(tmp_path) -> None:
     assert all("drawn from" in problem for problem in stale)
 
 
-def test_missing_figures_are_reported(tmp_path) -> None:
+def test_missing_figures_are_reported(tmp_path: Path) -> None:
     problems = ea.check_figures_current(ea.ErrorReport.load(), tmp_path)
     assert len(problems) == len(ea.FIGURES)
     assert all(p.endswith("missing") for p in problems)
@@ -93,3 +95,65 @@ def test_the_committed_figures_are_current() -> None:
     """The assets in the tree match the report in the tree. CI runs this too."""
     assets = Path(__file__).resolve().parents[1] / "assets"
     assert ea.check_figures_current(ea.ErrorReport.load(), assets) == []
+
+
+# --- the consistency checks themselves ---------------------------------------
+
+
+Report = dict[str, Any]
+
+
+def altered(tmp_path: Path, mutate: Callable[[Report], None]) -> ea.ErrorReport:
+    """The committed report with one number broken, to check a guard fires."""
+    raw: Report = json.loads(Path(ea.DEFAULT_REPORT).read_text(encoding="utf-8"))
+    mutate(raw)
+    path = tmp_path / "altered.json"
+    path.write_text(json.dumps(raw), encoding="utf-8")
+    return ea.ErrorReport.load(path)
+
+
+def test_a_class_that_does_not_sum_to_the_header_is_caught(tmp_path: Path) -> None:
+    def mutate(raw: Report) -> None:
+        raw["classes"]["Joy"]["samples"] += 5_000
+
+    problems = ea.check_consistency(altered(tmp_path, mutate))
+    assert any("class samples sum to" in p for p in problems)
+    assert any("Joy: error rate" in p for p in problems)
+
+
+def test_an_error_count_that_contradicts_the_accuracy_is_caught(tmp_path: Path) -> None:
+    def mutate(raw: Report) -> None:
+        raw["total_errors"] = 5000
+
+    problems = ea.check_consistency(altered(tmp_path, mutate))
+    assert any("class errors sum to" in p for p in problems)
+    assert any("errors/samples imply" in p for p in problems)
+
+
+def test_confusions_cannot_outnumber_the_errors_they_explain(tmp_path: Path) -> None:
+    def mutate(raw: Report) -> None:
+        raw["classes"]["Disgust"]["confused_with"] = {"Anger": 99_999}
+
+    problems = ea.check_consistency(altered(tmp_path, mutate))
+    assert any("listed confusions" in p for p in problems)
+
+
+# --- the stamp ---------------------------------------------------------------
+
+
+def test_an_unstamped_image_is_reported_as_unstamped(tmp_path: Path) -> None:
+    """A figure produced by anything other than the renderer carries no digest."""
+    report = ea.ErrorReport.load()
+    ea.render_all(report, tmp_path)
+    victim = tmp_path / next(iter(ea.FIGURES))
+    stripped = victim.read_bytes().replace(ea.STAMP_KEY.encode(), b"Other-Header")
+    victim.write_bytes(stripped)
+
+    problems = ea.check_figures_current(report, tmp_path)
+    assert problems == [f"{victim.name}: carries no {ea.STAMP_KEY} stamp"]
+
+
+def test_a_file_that_is_not_a_png_has_no_stamp(tmp_path: Path) -> None:
+    path = tmp_path / "not-an-image.png"
+    path.write_bytes(b"this is not a PNG")
+    assert ea.read_stamp(path) is None

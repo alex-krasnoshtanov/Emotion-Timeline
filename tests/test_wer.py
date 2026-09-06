@@ -92,3 +92,27 @@ def test_the_window_is_what_makes_it_a_comparison(systems: dict[str, pd.DataFram
     assert by_rows.window_end_s > 2400  # past 40 minutes
     assert by_time.window_end_s < 1200  # inside 20
     assert by_rows.wer < by_time.wer  # the longer slice flatters it
+
+
+def test_a_transcript_missing_a_column_is_refused(tmp_path: Path) -> None:
+    """Silently scoring a file with no deletion counts would understate the error rate."""
+    path = tmp_path / "partial.csv"
+    path.write_text("start_s,end_s,hypothesis,substitutions\n0,1,one two,0\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="missing column"):
+        wer.load(path)
+
+
+def test_blank_annotations_read_as_zero(tmp_path: Path) -> None:
+    path = tmp_path / "gappy.csv"
+    path.write_text(
+        "start_s,end_s,hypothesis,substitutions,insertions,deletions\n0,1,,,,\n",
+        encoding="utf-8",
+    )
+    result = wer.score(wer.load(path))
+    assert result.system == "gappy"
+    assert (result.hypothesis_tokens, result.errors, result.wer) == (0, 0, 0.0)
+
+
+def test_a_result_prints_its_window() -> None:
+    line = str(wer.score(frame([(0.0, 60.0, "one two three", 1, 0, 0)]), "sys"))
+    assert "sys" in line and "33.33%" in line and "1.0 min" in line
