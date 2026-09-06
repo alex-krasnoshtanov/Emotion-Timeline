@@ -1,0 +1,67 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+      - name: Lint
+        run: uvx ruff@0.6.9 check .
+      - name: Format check
+        run: uvx ruff@0.6.9 format --check .
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+          cache-dependency-glob: pyproject.toml
+      # Core plus dev only. The `model` and `stt` extras pull torch and a
+      # paid API client; nothing under tests/ needs either, and installing
+      # them would take the job from under a minute to several.
+      - name: Install
+        run: uv pip install --system -e ".[dev]"
+      - name: Test
+        run: pytest
+
+  # The README figures are generated from committed statistics, so they can go
+  # stale silently. Regenerate and fail if the result differs from what is in
+  # the tree.
+  figures:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+          cache-dependency-glob: pyproject.toml
+      - name: Install
+        run: uv pip install --system -e ".[dev]"
+      - name: Regenerate
+        run: emotion-timeline figures --out assets
+      - name: Fail if the committed figures are out of date
+        run: |
+          if ! git diff --quiet -- assets; then
+            echo "::error::assets/ is stale. Run 'emotion-timeline figures --out assets' and commit."
+            git diff --stat -- assets
+            exit 1
+          fi

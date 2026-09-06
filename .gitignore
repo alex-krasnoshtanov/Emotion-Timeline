@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.ruff_cache/
+
+# Datasets are rebuilt, never committed. build-dataset regenerates the
+# 428,331-row set from public sources; the CSV itself is ~174 MB.
+data/
+# csv: only bulk dataset dumps under data/ are ignored, not the
+# committed benchmark annotations under benchmarks/
+
+
+*.parquet
+*.xlsx
+
+# Model weights ship as release assets with a recorded SHA-256, not in git.
+models/
+*.pt
+*.pth
+*.bin
+*.safetensors
+
+# Media pulled by the pipeline
+downloads/
+*.mp3
+*.mp4
+*.wav
+
+# Local caches
+.cache/
+.env
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

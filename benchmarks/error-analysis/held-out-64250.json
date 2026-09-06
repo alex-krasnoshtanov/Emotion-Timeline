@@ -1,0 +1,62 @@
+{
+  "_comment": [
+    "Error analysis of the fine-tuned emotion classifier over its held-out",
+    "validation split. These are recorded summary statistics, not raw",
+    "predictions: the 64,250 per-sample predictions were not kept, so the",
+    "figures are rendered from this file rather than recomputed from scratch.",
+    "Everything here is internally checkable and tests/test_error_analysis.py",
+    "checks it -- per-class samples sum to the total, per-class errors sum to",
+    "the total, and each class error rate equals 1 minus the recall recorded",
+    "independently in the model card for the same split."
+  ],
+  "split": "held-out validation",
+  "total_samples": 64250,
+  "total_errors": 6454,
+  "accuracy": 0.8995,
+  "error_rate": 0.1005,
+
+  "classes": {
+    "Anger":    {"samples": 8695,  "errors": 538,  "error_rate": 0.0619,
+                 "confused_with": {"Disgust": 185, "Neutral": 126, "Sadness": 125}},
+    "Disgust":  {"samples": 2147,  "errors": 181,  "error_rate": 0.0843,
+                 "confused_with": {"Neutral": 49, "Anger": 48, "Sadness": 36}},
+    "Fear":     {"samples": 8003,  "errors": 1990, "error_rate": 0.2487,
+                 "confused_with": {"Sadness": 535, "Neutral": 383, "Disgust": 316, "Surprise": 315}},
+    "Joy":      {"samples": 22181, "errors": 1389, "error_rate": 0.0626,
+                 "confused_with": {"Neutral": 638, "Sadness": 243, "Disgust": 169}},
+    "Neutral":  {"samples": 2010,  "errors": 739,  "error_rate": 0.3677,
+                 "confused_with": {"Joy": 269, "Disgust": 239, "Sadness": 134}},
+    "Sadness":  {"samples": 18842, "errors": 1079, "error_rate": 0.0573,
+                 "confused_with": {"Anger": 290, "Disgust": 274, "Neutral": 241}},
+    "Surprise": {"samples": 2372,  "errors": 538,  "error_rate": 0.2268,
+                 "confused_with": {"Neutral": 156, "Joy": 155, "Disgust": 93}}
+  },
+
+  "length": {
+    "correct":   {"mean_characters": 94.60, "mean_words": 18.56},
+    "incorrect": {"mean_characters": 80.05, "mean_words": 15.35},
+    "mann_whitney_u": 2.129e8,
+    "p_value": 7.63e-78
+  },
+
+  "textual_features": {
+    "_comment": "Surface markers, and the error rate with and without each.",
+    "Exclamation mark": {"present_samples": 2194, "error_rate_present": 0.5661, "error_rate_absent": 0.0840},
+    "Question mark":    {"present_samples": 1217, "error_rate_present": 0.5579, "error_rate_absent": 0.0916},
+    "ALL-CAPS word":    {"present_samples": 4040, "error_rate_present": 0.5683, "error_rate_absent": 0.0691},
+    "Ellipsis":         {"present_samples": 7,    "error_rate_present": 0.1429, "error_rate_absent": 0.1004}
+  },
+
+  "vocabulary": {
+    "_comment": "Tokens skewed towards errors are slang, misspellings and brand names; tokens skewed towards correct predictions are standard and unambiguous.",
+    "error_biased": ["swine", "macbook", "twitterland", "ughh", "outta"],
+    "correct_biased": ["optimistic", "perspective", "winner", "engaged"]
+  },
+
+  "confidence": {
+    "mean_when_correct": 0.887,
+    "mean_when_incorrect": 0.428,
+    "high_confidence_errors": 625,
+    "high_confidence_error_share_of_errors": 0.0968
+  }
+}
