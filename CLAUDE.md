@@ -138,12 +138,17 @@ Lotsmanov (explainability). Anything ported from their work is named in the
 README Credits table. Rewrite rather than copy, and re-derive numbers rather than
 quoting them — that is how the WER discrepancy surfaced.
 
-## Local gotcha
+## Local gotchas
 
 On this machine, bash heredocs eat backslashes: `\\` in a quoted heredoc arrives
 as `\`. This has silently corrupted LaTeX line breaks and Python string literals
 more than once. **Write files containing backslashes with the Write tool**, or
 build them via `chr(92)`, rather than through a heredoc.
+
+This is Windows, so a text-mode write produces CRLF while the repository is LF
+throughout (`.gitattributes`). The `mixed-line-ending` hook catches it and
+rewrites the file, which costs a second `git add`. Pass `newline="\n"` to
+`Path.write_text` or `open()` and it does not come up.
 
 ## Commits
 
