@@ -41,8 +41,10 @@ jobs:
         run: pytest
 
   # The README figures are generated from committed statistics, so they can go
-  # stale silently. Regenerate and fail if the result differs from what is in
-  # the tree.
+  # stale silently. Each PNG records the SHA-256 of the report it was drawn
+  # from; this checks the stamp rather than the bytes, because matplotlib
+  # renders text with the host's fonts and a Linux runner never reproduces a
+  # Windows PNG byte for byte.
   figures:
     runs-on: ubuntu-latest
     steps:
@@ -56,12 +58,5 @@ jobs:
           cache-dependency-glob: pyproject.toml
       - name: Install
         run: uv pip install --system -e ".[dev]"
-      - name: Regenerate
-        run: emotion-timeline figures --out assets
-      - name: Fail if the committed figures are out of date
-        run: |
-          if ! git diff --quiet -- assets; then
-            echo "::error::assets/ is stale. Run 'emotion-timeline figures --out assets' and commit."
-            git diff --stat -- assets
-            exit 1
-          fi
+      - name: Figures match the data they claim to show
+        run: emotion-timeline figures --out assets --check

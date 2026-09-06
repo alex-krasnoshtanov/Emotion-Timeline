@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 from emotion_timeline.analysis import error_analysis as ea
 
 
@@ -53,3 +56,40 @@ def test_figures_render(tmp_path) -> None:
     assert len(written) == len(ea.FIGURES)
     for path in written:
         assert path.exists() and path.stat().st_size > 10_000
+
+
+# --- staleness ---------------------------------------------------------------
+
+
+def test_figures_record_the_report_they_were_drawn_from(tmp_path) -> None:
+    report = ea.ErrorReport.load()
+    for path in ea.render_all(report, tmp_path):
+        assert ea.read_stamp(path) == report.digest
+    assert ea.check_figures_current(report, tmp_path) == []
+
+
+def test_a_changed_report_makes_the_committed_figures_stale(tmp_path) -> None:
+    """The check has to actually fail when the numbers move underneath it."""
+    report = ea.ErrorReport.load()
+    ea.render_all(report, tmp_path)
+
+    edited = json.loads(Path(ea.DEFAULT_REPORT).read_text(encoding="utf-8"))
+    edited["confidence"]["mean_when_correct"] = 0.5
+    altered = tmp_path / "altered.json"
+    altered.write_text(json.dumps(edited), encoding="utf-8")
+
+    stale = ea.check_figures_current(ea.ErrorReport.load(altered), tmp_path)
+    assert len(stale) == len(ea.FIGURES)
+    assert all("drawn from" in problem for problem in stale)
+
+
+def test_missing_figures_are_reported(tmp_path) -> None:
+    problems = ea.check_figures_current(ea.ErrorReport.load(), tmp_path)
+    assert len(problems) == len(ea.FIGURES)
+    assert all(p.endswith("missing") for p in problems)
+
+
+def test_the_committed_figures_are_current() -> None:
+    """The assets in the tree match the report in the tree. CI runs this too."""
+    assets = Path(__file__).resolve().parents[1] / "assets"
+    assert ea.check_figures_current(ea.ErrorReport.load(), assets) == []

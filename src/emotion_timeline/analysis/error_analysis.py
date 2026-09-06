@@ -13,7 +13,9 @@ the error rate from under 10% to over 55%.
 
 from __future__ import annotations
 
+import hashlib
 import json
+import struct
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -57,10 +59,14 @@ class ErrorReport:
     textual_features: dict[str, dict]
     vocabulary: dict[str, list[str]]
     confidence: dict
+    source: Path
+    digest: str
 
     @classmethod
     def load(cls, path: str | Path = DEFAULT_REPORT) -> ErrorReport:
-        raw = json.loads(Path(path).read_text(encoding="utf-8"))
+        source = Path(path)
+        payload = source.read_bytes()
+        raw = json.loads(payload.decode("utf-8"))
         classes = {
             name: ClassResult(
                 name=name,
@@ -83,6 +89,8 @@ class ErrorReport:
             },
             vocabulary={k: v for k, v in raw["vocabulary"].items() if not k.startswith("_")},
             confidence=raw["confidence"],
+            source=source,
+            digest=hashlib.sha256(payload).hexdigest(),
         )
 
     def hardest(self, n: int = 3) -> list[ClassResult]:
@@ -142,6 +150,61 @@ def check_consistency(report: ErrorReport) -> list[str]:
 # --- figures ----------------------------------------------------------------
 
 
+STAMP_KEY = "Source-SHA256"
+
+
+def _stamp(report: ErrorReport) -> dict[str, str]:
+    """PNG text chunks recording which report the figure was drawn from.
+
+    Byte-comparing a regenerated PNG against the committed one does not work:
+    matplotlib renders text with whatever fonts the machine has, so the same
+    figure differs between a Windows laptop and a Linux runner -- which is
+    exactly how this repository's first CI run failed. Recording the digest of
+    the source data instead tests the thing actually worth testing, whether the
+    picture is older than the numbers, and gives the same answer everywhere.
+    """
+    return {"Software": "emotion-timeline", STAMP_KEY: report.digest}
+
+
+def read_stamp(path: str | Path) -> str | None:
+    """The Source-SHA256 recorded in a PNG, or None if it carries no stamp.
+
+    Walks tEXt chunks directly rather than adding an image library to a
+    dependency list that is deliberately four packages long.
+    """
+    data = Path(path).read_bytes()
+    if not data.startswith(b"\x89PNG\r\n\x1a\n"):
+        return None
+    offset = 8
+    while offset + 12 <= len(data):
+        (length,) = struct.unpack(">I", data[offset : offset + 4])
+        kind = data[offset + 4 : offset + 8]
+        body = data[offset + 8 : offset + 8 + length]
+        if kind == b"tEXt" and b"\x00" in body:
+            key, _, value = body.partition(b"\x00")
+            if key.decode("latin-1") == STAMP_KEY:
+                return value.decode("latin-1")
+        offset += 12 + length
+    return None
+
+
+def check_figures_current(report: ErrorReport, out_dir: str | Path) -> list[str]:
+    """Figures that are missing, unstamped, or drawn from an older report."""
+    directory = Path(out_dir)
+    problems: list[str] = []
+    for name in FIGURES:
+        path = directory / name
+        if not path.exists():
+            problems.append(f"{name}: missing")
+            continue
+        stamp = read_stamp(path)
+        if stamp is None:
+            problems.append(f"{name}: carries no {STAMP_KEY} stamp")
+        elif stamp != report.digest:
+            problems.append(f"{name}: drawn from {stamp[:12]}, report is {report.digest[:12]}")
+    return problems
+
+
 def _style(ax) -> None:
     ax.set_axisbelow(True)
     ax.grid(axis="x", color=GRID, linewidth=0.8)
@@ -186,7 +249,7 @@ def figure_textual_features(report: ErrorReport, path: Path) -> Path:
     ax.legend(frameon=False, fontsize=9, loc="lower right", labelcolor=MUTED)
     _style(ax)
     fig.tight_layout()
-    fig.savefig(path, facecolor="white")
+    fig.savefig(path, facecolor="white", metadata=_stamp(report))
     plt.close(fig)
     return path
 
@@ -228,7 +291,7 @@ def figure_class_difficulty(report: ErrorReport, path: Path) -> Path:
     )
     _style(ax)
     fig.tight_layout()
-    fig.savefig(path, facecolor="white")
+    fig.savefig(path, facecolor="white", metadata=_stamp(report))
     plt.close(fig)
     return path
 
@@ -271,7 +334,7 @@ def figure_confidence(report: ErrorReport, path: Path) -> Path:
     )
     _style(ax)
     fig.tight_layout()
-    fig.savefig(path, facecolor="white")
+    fig.savefig(path, facecolor="white", metadata=_stamp(report))
     plt.close(fig)
     return path
 
@@ -310,7 +373,7 @@ def figure_length(report: ErrorReport, path: Path) -> Path:
     ax.legend(frameon=False, fontsize=9, loc="lower right", labelcolor=MUTED)
     _style(ax)
     fig.tight_layout()
-    fig.savefig(path, facecolor="white")
+    fig.savefig(path, facecolor="white", metadata=_stamp(report))
     plt.close(fig)
     return path
 

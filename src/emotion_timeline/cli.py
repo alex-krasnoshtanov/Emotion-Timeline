@@ -92,6 +92,19 @@ def cmd_figures(args: argparse.Namespace) -> int:
             print(f"inconsistent report: {problem}", file=sys.stderr)
         return 1
 
+    if args.check:
+        stale = error_analysis.check_figures_current(report, args.out)
+        for problem in stale:
+            print(f"stale figure: {problem}", file=sys.stderr)
+        if stale:
+            print(
+                "run 'emotion-timeline figures --out assets' and commit the result",
+                file=sys.stderr,
+            )
+            return 1
+        print(f"{len(error_analysis.FIGURES)} figures current for report {report.digest[:12]}")
+        return 0
+
     for path in error_analysis.render_all(report, args.out):
         print(f"wrote {path}")
     return 0
@@ -167,6 +180,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     figures_parser.add_argument("--report", default=report_default)
     figures_parser.add_argument("--out", default="assets", help="output directory")
+    figures_parser.add_argument(
+        "--check",
+        action="store_true",
+        help="verify the committed figures were drawn from the current report, and do not redraw",
+    )
     figures_parser.set_defaults(func=cmd_figures)
 
     return parser
