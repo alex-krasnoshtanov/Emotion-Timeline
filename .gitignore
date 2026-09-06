@@ -14,8 +14,10 @@ coverage.xml
 htmlcov/
 
 # Datasets are rebuilt, never committed. build-dataset regenerates the
-# 428,331-row set from public sources; the CSV itself is ~174 MB.
-data/
+# set from public sources; the CSV itself is ~170 MB.
+# Anchored to the repository root on purpose: an unanchored `data/` also
+# ignores src/emotion_timeline/data/, which is source code.
+/data/
 # csv: only bulk dataset dumps under data/ are ignored, not the
 # committed benchmark annotations under benchmarks/
 

@@ -793,6 +793,9 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
+data = [
+    { name = "datasets" },
+]
 demo = [
     { name = "fastapi" },
     { name = "python-multipart" },
@@ -820,6 +823,7 @@ stt = [
 [package.metadata]
 requires-dist = [
     { name = "assemblyai", marker = "extra == 'stt'", specifier = ">=0.34" },
+    { name = "datasets", marker = "extra == 'data'", specifier = ">=3.0" },
     { name = "datasets", marker = "extra == 'model'", specifier = ">=3.0" },
     { name = "fastapi", marker = "extra == 'demo'", specifier = ">=0.115" },
     { name = "faster-whisper", marker = "extra == 'stt'", specifier = ">=1.1" },
@@ -840,7 +844,7 @@ requires-dist = [
     { name = "transformers", marker = "extra == 'model'", specifier = ">=4.44" },
     { name = "uvicorn", extras = ["standard"], marker = "extra == 'demo'", specifier = ">=0.30" },
 ]
-provides-extras = ["dev", "stt", "model", "demo"]
+provides-extras = ["dev", "stt", "data", "model", "demo"]
 
 [[package]]
 name = "fastapi"

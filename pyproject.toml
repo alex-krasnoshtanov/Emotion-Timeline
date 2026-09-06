@@ -39,6 +39,11 @@ stt = [
     "faster-whisper>=1.1",
     "assemblyai>=0.34",
 ]
+# Only `build-dataset` needs this: it downloads the 552,821-row source corpus.
+# Reading the recorded build with `emotion-timeline dataset` needs nothing.
+data = [
+    "datasets>=3.0",
+]
 model = [
     "torch>=2.4",
     "transformers>=4.44",
@@ -87,6 +92,10 @@ select = [
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["E501"]
+# RUF001 flags characters that look like ASCII but are not. In this module they
+# are the subject matter: the mapping exists precisely to turn a curly quote, an
+# en dash and a Cyrillic placeholder name into their plain equivalents.
+"src/emotion_timeline/data/clean.py" = ["RUF001"]
 
 [tool.coverage.run]
 source = ["src/emotion_timeline"]

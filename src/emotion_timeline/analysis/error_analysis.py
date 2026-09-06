@@ -15,13 +15,14 @@ from __future__ import annotations
 
 import hashlib
 import json
-import struct
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
-if TYPE_CHECKING:  # matplotlib is imported inside the figure functions only
-    from matplotlib.axes import Axes
+from emotion_timeline import figures
+from emotion_timeline.figures import ACCENT, INK, MUTED, RIGHT, WRONG
+
+STAMP_KEY = figures.STAMP_KEY
 
 # The recorded statistics are heterogeneous JSON blocks -- an int, a float and a
 # nested dict can sit under one key -- so they stay dicts and are read by key
@@ -31,15 +32,6 @@ Stats = dict[str, Any]
 
 BENCHMARK = Path(__file__).resolve().parents[3] / "benchmarks" / "error-analysis"
 DEFAULT_REPORT = BENCHMARK / "held-out-64250.json"
-
-# One colour per role, used the same way in every figure: the thing that went
-# wrong is always this red, the thing that went right is always this green.
-INK = "#1d2427"
-MUTED = "#6b7a7d"
-GRID = "#dde4e3"
-WRONG = "#ab2f27"
-RIGHT = "#2a6a46"
-ACCENT = "#0d6a70"
 
 
 @dataclass(frozen=True, slots=True)
@@ -160,68 +152,22 @@ def check_consistency(report: ErrorReport) -> list[str]:
 # --- figures ----------------------------------------------------------------
 
 
-STAMP_KEY = "Source-SHA256"
-
-
 def _stamp(report: ErrorReport) -> dict[str, str]:
-    """PNG text chunks recording which report the figure was drawn from.
-
-    Byte-comparing a regenerated PNG against the committed one does not work:
-    matplotlib renders text with whatever fonts the machine has, so the same
-    figure differs between a Windows laptop and a Linux runner -- which is
-    exactly how this repository's first CI run failed. Recording the digest of
-    the source data instead tests the thing actually worth testing, whether the
-    picture is older than the numbers, and gives the same answer everywhere.
-    """
-    return {"Software": "emotion-timeline", STAMP_KEY: report.digest}
+    return figures.stamp(report.digest)
 
 
 def read_stamp(path: str | Path) -> str | None:
-    """The Source-SHA256 recorded in a PNG, or None if it carries no stamp.
-
-    Walks tEXt chunks directly rather than adding an image library to a
-    dependency list that is deliberately four packages long.
-    """
-    data = Path(path).read_bytes()
-    if not data.startswith(b"\x89PNG\r\n\x1a\n"):
-        return None
-    offset = 8
-    while offset + 12 <= len(data):
-        (length,) = struct.unpack(">I", data[offset : offset + 4])
-        kind = data[offset + 4 : offset + 8]
-        body = data[offset + 8 : offset + 8 + length]
-        if kind == b"tEXt" and b"\x00" in body:
-            key, _, value = body.partition(b"\x00")
-            if key.decode("latin-1") == STAMP_KEY:
-                return value.decode("latin-1")
-        offset += 12 + length
-    return None
+    """The report digest recorded in a PNG, or None if it carries no stamp."""
+    return figures.read_stamp(path)
 
 
 def check_figures_current(report: ErrorReport, out_dir: str | Path) -> list[str]:
     """Figures that are missing, unstamped, or drawn from an older report."""
-    directory = Path(out_dir)
-    problems: list[str] = []
-    for name in FIGURES:
-        path = directory / name
-        if not path.exists():
-            problems.append(f"{name}: missing")
-            continue
-        stamp = read_stamp(path)
-        if stamp is None:
-            problems.append(f"{name}: carries no {STAMP_KEY} stamp")
-        elif stamp != report.digest:
-            problems.append(f"{name}: drawn from {stamp[:12]}, report is {report.digest[:12]}")
-    return problems
+    return figures.check_current(FIGURES, report.digest, out_dir)
 
 
-def _style(ax: Axes) -> None:
-    ax.set_axisbelow(True)
-    ax.grid(axis="x", color=GRID, linewidth=0.8)
-    ax.tick_params(colors=MUTED, labelsize=9)
-    for side in ("top", "right", "left"):
-        ax.spines[side].set_visible(False)
-    ax.spines["bottom"].set_color(GRID)
+def _style(ax: Any) -> None:
+    figures.style(ax)
 
 
 def figure_textual_features(report: ErrorReport, path: Path) -> Path:
@@ -398,6 +344,4 @@ FIGURES = {
 
 def render_all(report: ErrorReport, out_dir: str | Path) -> list[Path]:
     """Write every figure. Deterministic, so CI can diff the result."""
-    directory = Path(out_dir)
-    directory.mkdir(parents=True, exist_ok=True)
-    return [render(report, directory / name) for name, render in FIGURES.items()]
+    return figures.render_all(FIGURES, report, out_dir)

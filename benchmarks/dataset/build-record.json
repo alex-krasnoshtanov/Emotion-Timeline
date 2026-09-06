@@ -1,0 +1,128 @@
+{
+  "_comment": [
+    "What a run of `emotion-timeline build-dataset` produces, recorded so the",
+    "funnel can be checked without the 550,000-row download. Every number here",
+    "was reproduced by this repository's own code, not copied from the original",
+    "notebook -- and every published class count matched to the row.",
+    "The one exception is the synthetic Disgust set under `published`: 9,151",
+    "rows generated for the original project, whose file did not survive. They",
+    "cannot be rebuilt, so `rows` below is the reproducible part and",
+    "`published.rows` is what the model was actually trained on."
+  ],
+  "source": "cirimus/super-emotion",
+  "source_composition": {
+    "Crowdflower": {
+      "rows": 39171,
+      "kept": 39171
+    },
+    "GoEmotions": {
+      "rows": 52534,
+      "kept": 1013
+    },
+    "ISEAR": {
+      "rows": 416809,
+      "kept": 416809
+    },
+    "MELD": {
+      "rows": 13708,
+      "kept": 13708
+    },
+    "SemEval": {
+      "rows": 10599,
+      "kept": 10599
+    },
+    "TwitterEmotion": {
+      "rows": 20000,
+      "kept": 20000
+    }
+  },
+  "rows": 419180,
+  "steps": [
+    {
+      "name": "load",
+      "rows_in": 552821,
+      "rows_out": 552821,
+      "note": "every split of cirimus/super-emotion"
+    },
+    {
+      "name": "filter-sources",
+      "rows_in": 552821,
+      "rows_out": 501300,
+      "note": "GoEmotions kept only where it annotates disgust"
+    },
+    {
+      "name": "normalise",
+      "rows_in": 501300,
+      "rows_out": 501300,
+      "note": "quotes, emoji, slang, entity masking"
+    },
+    {
+      "name": "deduplicate",
+      "rows_in": 501300,
+      "rows_out": 456141,
+      "note": "identical text, before case is folded"
+    },
+    {
+      "name": "fold-case",
+      "rows_in": 456141,
+      "rows_out": 456141,
+      "note": "lowercase with [CAPS], punctuation, repeats"
+    },
+    {
+      "name": "filter-length",
+      "rows_in": 456141,
+      "rows_out": 454120,
+      "note": "3 to 512 tokens"
+    },
+    {
+      "name": "tidy",
+      "rows_in": 454120,
+      "rows_out": 454120,
+      "note": "collapse runs of identical placeholders"
+    },
+    {
+      "name": "drop-love",
+      "rows_in": 454120,
+      "rows_out": 419180,
+      "note": "no seven-class equivalent"
+    },
+    {
+      "name": "assign-labels",
+      "rows_in": 419180,
+      "rows_out": 419180,
+      "note": "collapse by priority, restore from source"
+    }
+  ],
+  "class_counts": {
+    "Anger": 57963,
+    "Disgust": 5165,
+    "Fear": 53351,
+    "Joy": 147869,
+    "Neutral": 13401,
+    "Sadness": 125615,
+    "Surprise": 15816
+  },
+  "published": {
+    "_comment": [
+      "The dataset the model in docs/error-analysis.md was trained on:",
+      "the reproducible build plus the synthetic Disgust rows.",
+      "held_out_rows is 15% of it, and matches the evaluation reported in",
+      "benchmarks/error-analysis/held-out-64250.json to the row in all",
+      "seven classes -- an independent check that the two describe the",
+      "same dataset."
+    ],
+    "rows": 428331,
+    "synthetic_disgust_rows": 9151,
+    "held_out_fraction": 0.15,
+    "held_out_rows": 64250,
+    "class_counts": {
+      "Anger": 57963,
+      "Disgust": 14316,
+      "Fear": 53351,
+      "Joy": 147869,
+      "Neutral": 13401,
+      "Sadness": 125615,
+      "Surprise": 15816
+    }
+  }
+}

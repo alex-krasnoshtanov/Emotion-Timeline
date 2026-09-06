@@ -8,7 +8,9 @@ from __future__ import annotations
 
 import argparse
 import sys
+from collections.abc import Iterator
 from pathlib import Path
+from typing import Any
 
 BENCHMARKS = Path(__file__).resolve().parents[2] / "benchmarks"
 
@@ -80,11 +82,39 @@ def cmd_wer(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_figures(args: argparse.Namespace) -> int:
-    from emotion_timeline.analysis import error_analysis
+def _stages(args: argparse.Namespace) -> list[tuple[str, Any, Any, Any]]:
+    """Every stage that owns figures: its report, renderers and consistency check.
 
-    report = error_analysis.ErrorReport.load(args.report)
-    problems = error_analysis.check_consistency(report)
+    Each stage stamps its figures with the digest of its own source file, so a
+    changed error report does not make the dataset figures stale and the other
+    way round.
+    """
+    from emotion_timeline.analysis import error_analysis
+    from emotion_timeline.data import build as dataset
+    from emotion_timeline.data import figures as dataset_figures
+
+    return [
+        (
+            "error-analysis",
+            error_analysis.ErrorReport.load(args.report),
+            error_analysis.FIGURES,
+            error_analysis.check_consistency,
+        ),
+        (
+            "dataset",
+            dataset.DatasetReport.load(args.build_record),
+            dataset_figures.FIGURES,
+            dataset.check_consistency,
+        ),
+    ]
+
+
+def cmd_figures(args: argparse.Namespace) -> int:
+    from emotion_timeline import figures as shared
+
+    stages = _stages(args)
+
+    problems = [f"{name}: {p}" for name, report, _, check in stages for p in check(report)]
     if problems:
         # Rendering a chart from statistics that contradict each other would
         # publish the contradiction as a picture. Refuse instead.
@@ -93,7 +123,11 @@ def cmd_figures(args: argparse.Namespace) -> int:
         return 1
 
     if args.check:
-        stale = error_analysis.check_figures_current(report, args.out)
+        stale = [
+            f"{name}: {p}"
+            for name, report, renderers, _ in stages
+            for p in shared.check_current(renderers, report.digest, args.out)
+        ]
         for problem in stale:
             print(f"stale figure: {problem}", file=sys.stderr)
         if stale:
@@ -102,11 +136,13 @@ def cmd_figures(args: argparse.Namespace) -> int:
                 file=sys.stderr,
             )
             return 1
-        print(f"{len(error_analysis.FIGURES)} figures current for report {report.digest[:12]}")
+        total = sum(len(renderers) for _, _, renderers, _ in stages)
+        print(f"{total} figures current across {len(stages)} stages")
         return 0
 
-    for path in error_analysis.render_all(report, args.out):
-        print(f"wrote {path}")
+    for _, report, renderers, _ in stages:
+        for path in shared.render_all(renderers, report, args.out):
+            print(f"wrote {path}")
     return 0
 
 
@@ -132,6 +168,91 @@ def cmd_errors(args: argparse.Namespace) -> int:
             f"{body['error_rate_absent'] * 100:5.2f}% without "
             f"({body['present_samples']:,} samples)"
         )
+    return 0
+
+
+def cmd_dataset(args: argparse.Namespace) -> int:
+    """What the training set is made of, from the committed record."""
+    from emotion_timeline.data.build import DatasetReport, check_consistency
+
+    report = DatasetReport.load(args.build_record)
+    problems = check_consistency(report)
+    for problem in problems:
+        print(f"inconsistent record: {problem}", file=sys.stderr)
+    if problems:
+        return 1
+
+    published = report.published
+    print(f"{report.raw['source']}: {report.steps[0]['rows_out']:,} rows across six corpora")
+    width = max(len(name) for name in report.composition)
+    for name, body in sorted(report.composition.items(), key=lambda kv: -kv[1]["rows"]):
+        dropped = body["rows"] - body["kept"]
+        note = f"  ({dropped:,} dropped, kept only where it annotates disgust)" if dropped else ""
+        print(f"  {name:<{width}} {body['rows']:>7,}{note}")
+
+    print()
+    print("  the build")
+    for line in iter_progress_from(report):
+        print(line)
+
+    print()
+    print(f"  published training set: {published['rows']:,} rows")
+    print(
+        f"    {report.rows:,} reproducible + {published['synthetic_disgust_rows']:,} "
+        "synthetic Disgust rows that no longer exist"
+    )
+    total = published["rows"]
+    for name, count in sorted(published["class_counts"].items(), key=lambda kv: -kv[1]):
+        print(f"    {name:<9} {count:>7,}  {count / total * 100:5.2f}%")
+    return 0
+
+
+def iter_progress_from(report: Any) -> Iterator[str]:
+    width = max(len(s["name"]) for s in report.steps)
+    for step in report.steps:
+        removed = step["rows_in"] - step["rows_out"]
+        marker = f"-{removed:,}" if removed else ""
+        yield f"    {step['name']:<{width}}  {step['rows_out']:>7,}  {marker:>9}  {step['note']}"
+
+
+def cmd_build_dataset(args: argparse.Namespace) -> int:
+    """Rebuild the training set from the public corpus and check the funnel."""
+    from emotion_timeline.data import build as dataset
+
+    try:
+        frame, record = dataset.build(args.cache)
+    except ImportError:
+        print(
+            "building needs the source corpus: install with --extra data (uv sync --extra data)",
+            file=sys.stderr,
+        )
+        return 1
+
+    for line in dataset.iter_progress(record):
+        print(line)
+    print()
+    print(f"{record.rows:,} rows")
+    for name, count in sorted(record.counts.items(), key=lambda kv: -kv[1]):
+        print(f"  {name:<9} {count:>7,}")
+
+    expected = dataset.DatasetReport.load(args.build_record)
+    differences = dataset.compare(record, expected)
+    for difference in differences:
+        print(f"differs from the record: {difference}", file=sys.stderr)
+    if differences:
+        print(
+            "the build no longer reproduces benchmarks/dataset/build-record.json",
+            file=sys.stderr,
+        )
+        return 1
+    print()
+    print(f"matches {expected.source.name} exactly")
+
+    if args.out:
+        out = Path(args.out)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        frame.to_csv(out, index=False, encoding="utf-8")
+        print(f"wrote {out} ({out.stat().st_size / 1e6:.0f} MB)")
     return 0
 
 
@@ -166,6 +287,36 @@ def build_parser() -> argparse.ArgumentParser:
     wer_parser.set_defaults(func=cmd_wer)
 
     report_default = str(BENCHMARKS / "error-analysis" / "held-out-64250.json")
+    record_default = str(BENCHMARKS / "dataset" / "build-record.json")
+
+    dataset_parser = sub.add_parser(
+        "dataset",
+        help="what the training set is made of, and what building it discarded",
+        description=(
+            "Reads the committed build record. Every number it prints was produced "
+            "by 'build-dataset' on this machine, not copied from the original "
+            "notebook -- except the 9,151 synthetic Disgust rows, which are named "
+            "as such because their source file no longer exists."
+        ),
+    )
+    dataset_parser.add_argument("--build-record", default=record_default)
+    dataset_parser.set_defaults(func=cmd_dataset)
+
+    build_dataset_parser = sub.add_parser(
+        "build-dataset",
+        help="rebuild the training set from the public corpus (needs --extra data)",
+        description=(
+            "Downloads the source corpus and reruns the whole funnel, then checks "
+            "the result against the committed record. Takes a few minutes and about "
+            "a gigabyte of cache."
+        ),
+    )
+    build_dataset_parser.add_argument("--build-record", default=record_default)
+    build_dataset_parser.add_argument(
+        "--out", help="write the rebuilt dataset here as CSV (default: do not write it)"
+    )
+    build_dataset_parser.add_argument("--cache", help="dataset download cache directory")
+    build_dataset_parser.set_defaults(func=cmd_build_dataset)
 
     errors_parser = sub.add_parser(
         "errors",
@@ -179,6 +330,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="render the README figures from the recorded statistics",
     )
     figures_parser.add_argument("--report", default=report_default)
+    figures_parser.add_argument("--build-record", default=record_default)
     figures_parser.add_argument("--out", default="assets", help="output directory")
     figures_parser.add_argument(
         "--check",

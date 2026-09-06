@@ -101,18 +101,27 @@ def test_errors_prints_the_headline_and_the_hardest_classes(
 # --- figures -----------------------------------------------------------------
 
 
-def test_figures_writes_every_figure(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+def all_figures() -> set[str]:
+    """Every figure the repository publishes, across every stage."""
     from emotion_timeline.analysis import error_analysis as ea
+    from emotion_timeline.data import figures as ds_figures
 
+    return set(ea.FIGURES) | set(ds_figures.FIGURES)
+
+
+def test_figures_writes_every_figure_from_every_stage(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
     assert cli.main(["figures", "--out", str(tmp_path)]) == 0
-    assert capsys.readouterr().out.count("wrote ") == len(ea.FIGURES)
-    assert sorted(p.name for p in tmp_path.glob("*.png")) == sorted(ea.FIGURES)
+    assert capsys.readouterr().out.count("wrote ") == len(all_figures())
+    assert {p.name for p in tmp_path.glob("*.png")} == all_figures()
 
 
 def test_check_passes_against_the_committed_assets(capsys: pytest.CaptureFixture[str]) -> None:
     """The same command CI runs. If this fails, `assets/` needs regenerating."""
     assert cli.main(["figures", "--out", str(ROOT / "assets"), "--check"]) == 0
-    assert "figures current" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert f"{len(all_figures())} figures current" in out
 
 
 def test_check_fails_when_a_figure_is_missing(
@@ -148,7 +157,7 @@ def test_a_subcommand_is_required() -> None:
         cli.main([])
 
 
-@pytest.mark.parametrize("command", ["wer", "errors", "figures"])
+@pytest.mark.parametrize("command", ["wer", "errors", "figures", "dataset", "build-dataset"])
 def test_every_subcommand_documents_itself(
     command: str, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -157,3 +166,80 @@ def test_every_subcommand_documents_itself(
         cli.main([command, "--help"])
     assert exit_code.value.code == 0
     assert capsys.readouterr().out.startswith(f"usage: emotion-timeline {command}")
+
+
+# --- dataset -----------------------------------------------------------------
+
+
+def test_dataset_prints_the_composition_and_the_published_split(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    assert cli.main(["dataset"]) == 0
+    out = capsys.readouterr().out
+    assert "552,821 rows across six corpora" in out
+    assert "419,180 reproducible + 9,151 synthetic" in out
+    assert "428,331 rows" in out
+    # Joy first, Neutral last: the imbalance is the point of the section.
+    assert out.index("Joy") < out.index("Neutral")
+    assert "GoEmotions" in out and "51,521 dropped" in out
+
+
+def test_dataset_refuses_an_inconsistent_record(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from emotion_timeline.data import build as ds
+
+    raw = json.loads(Path(ds.DEFAULT_RECORD).read_text(encoding="utf-8"))
+    raw["rows"] = 1
+    record = tmp_path / "broken.json"
+    record.write_text(json.dumps(raw), encoding="utf-8")
+
+    assert cli.main(["dataset", "--build-record", str(record)]) == 1
+    assert "inconsistent record" in capsys.readouterr().err
+
+
+def test_build_dataset_checks_itself_against_the_record(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A build that does not reproduce the committed funnel is a failure, not a note."""
+    from emotion_timeline.data import build as ds
+    from tests.test_dataset import corpus
+
+    monkeypatch.setattr(ds, "load_source", lambda cache_dir=None: corpus())
+    out = tmp_path / "nested" / "dataset.csv"
+    assert cli.main(["build-dataset", "--out", str(out)]) == 1
+
+    printed = capsys.readouterr()
+    assert "differs from the record" in printed.err
+    assert "no longer reproduces" in printed.err
+    assert "load" in printed.out
+    # The CSV is only written once the build agrees with the record.
+    assert not out.exists()
+
+
+def test_build_dataset_writes_the_csv_when_the_build_matches(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from emotion_timeline.data import build as ds
+    from tests.test_dataset import corpus
+
+    monkeypatch.setattr(ds, "load_source", lambda cache_dir=None: corpus())
+    monkeypatch.setattr(ds, "compare", lambda record, expected: [])
+    out = tmp_path / "dataset.csv"
+    assert cli.main(["build-dataset", "--out", str(out)]) == 0
+    assert "matches build-record.json exactly" in capsys.readouterr().out
+    assert out.exists() and out.read_text(encoding="utf-8").startswith("text,label,")
+
+
+def test_build_dataset_explains_the_missing_extra(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """`datasets` is an optional extra, so the failure has to say how to fix it."""
+    from emotion_timeline.data import build as ds
+
+    def no_datasets(cache_dir: object = None) -> None:
+        raise ImportError("No module named 'datasets'")
+
+    monkeypatch.setattr(ds, "load_source", no_datasets)
+    assert cli.main(["build-dataset"]) == 1
+    assert "--extra data" in capsys.readouterr().err
