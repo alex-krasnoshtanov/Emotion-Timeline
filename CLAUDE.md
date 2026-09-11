@@ -42,6 +42,13 @@ So when you add a result:
   is deterministic, so a difference means the code changed. If a rule genuinely
   needs to change, rerun the build and commit the new record in the same commit
   as the code, with the docs updated to match.
+- **An inherited document is evidence, not a source.** Three stages now audit
+  coursework records rather than rerunning them, and each found something the
+  prose got wrong: the benchmark's ranking, the model card's dataset table, the
+  stress test's control group. Transcribe the numbers into `benchmarks/`, check
+  every relation they must satisfy, and let the arithmetic decide what the
+  document supports. Quoting a figure forward is how the mislabelled class table
+  reached this project's own plan.
 - **Bugs in the original build are reproduced, not fixed.** The emoticon
   stripper eats the `://` out of URLs, so 1,658 of 1,857 URLs are never masked.
   The published model was trained on data with that in it. Fixing it silently
@@ -82,6 +89,7 @@ src/emotion_timeline/
   analysis/           error analysis over model predictions
   data/               dataset construction from the public corpus
   selection/          the audit of the inherited model comparison
+  model/              the trained classifier's two records, audited
   figures.py          palette, styling and the staleness stamp, shared
   cli.py              one subcommand per stage
 docs/                 one chapter per stage, each ending in what it does NOT show
@@ -101,7 +109,8 @@ uv run pre-commit run --all-files   # everything the lint job runs
 
 uv run emotion-timeline wer --window 0:00-18:09   # speech-to-text comparison
 uv run emotion-timeline dataset                   # what the training set is made of
-uv run emotion-timeline models                    # audit of the nine-family benchmark
+uv run emotion-timeline models                    # the nine-family benchmark, audited
+uv run emotion-timeline model                     # the trained classifier's two records
 uv run emotion-timeline errors                    # where the classifier fails
 uv run emotion-timeline figures --out assets      # regenerate every figure, every stage
 

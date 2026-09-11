@@ -92,6 +92,8 @@ def _stages(args: argparse.Namespace) -> list[tuple[str, Any, Any, Any]]:
     from emotion_timeline.analysis import error_analysis
     from emotion_timeline.data import build as dataset
     from emotion_timeline.data import figures as dataset_figures
+    from emotion_timeline.model import card as model_card
+    from emotion_timeline.model import figures as model_figures
     from emotion_timeline.selection import figures as selection_figures
     from emotion_timeline.selection import runs as selection
 
@@ -113,6 +115,12 @@ def _stages(args: argparse.Namespace) -> list[tuple[str, Any, Any, Any]]:
             selection.SelectionReport.load(args.run_log, args.submitted_log),
             selection_figures.FIGURES,
             selection.check_consistency,
+        ),
+        (
+            "model",
+            model_card.ModelReport.load(args.card_metrics),
+            model_figures.FIGURES,
+            model_card.check_consistency,
         ),
     ]
 
@@ -280,6 +288,88 @@ def cmd_build_dataset(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_model(args: argparse.Namespace) -> int:
+    """What the two surviving records of the trained classifier can support."""
+    from emotion_timeline.model.card import (
+        ModelReport,
+        check_consistency,
+        disgust_false_positive_bounds,
+        single_label_identity_holds,
+    )
+
+    report = ModelReport.load(args.card_metrics)
+    problems = check_consistency(report)
+    for problem in problems:
+        print(f"inconsistent record: {problem}", file=sys.stderr)
+    if problems:
+        return 1
+
+    print("the card's three evaluations, every figure recomputed from its own table")
+    for evaluation in report.evaluations:
+        note = (
+            ""
+            if evaluation.scored_classes == 7
+            else f"  ({evaluation.scored_classes} of 7 classes)"
+        )
+        print(
+            f"  {evaluation.name:<9} {evaluation.samples:>6,} samples   "
+            f"accuracy {evaluation.accuracy:.4f}   macro F1 {evaluation.macro_f1:.4f}{note}"
+        )
+
+    stress = report.evaluation("stress")
+    print(f"    stress macro F1 over all seven classes would be {stress.macro_f1_over(7):.4f}")
+
+    print()
+    print("  which record is which")
+    for evaluation in report.evaluations:
+        if "micro_f1" not in evaluation.raw:
+            verdict = "no micro F1 reported, so silent either way"
+        elif single_label_identity_holds(evaluation):
+            verdict = "holds, so this table is single-label"
+        else:
+            verdict = "does not hold"
+        print(f"    {evaluation.name:<9} micro F1 == accuracy: {verdict}")
+    script = report.script_metrics
+    print(
+        f"    script    micro F1 {script['f1_micro']:.4f} against subset accuracy "
+        f"{script['subset_accuracy']:.4f}, so multi-label"
+    )
+    print(
+        f"    script    hamming loss implies {report.script_labels_per_sample:.3f} true labels "
+        "per sample, so not the collapsed dataset"
+    )
+    print(
+        f"    script    surviving tokenizer holds "
+        f"{report.script['surviving_tokenizer_tokens']:,} tokens; the card claims "
+        f"{report.card['claimed_vocabulary_size']:,}"
+    )
+
+    print()
+    print("  the card's dataset table, against the counts this repository builds")
+    for count, said, truth in report.mislabelled():
+        print(f"    {count:>7,} rows called {said:<10} are {truth}")
+
+    print()
+    print("  the stress test")
+    control = report.control
+    print(f"    control scores {control.accuracy:.4f} on {control.samples:,} of 5,000 samples")
+    for row in report.outliers_beating_the_control():
+        print(f"      {row.name:<18} {row.accuracy:.4f}  beats the control")
+    failures = report.total_failures()
+    print(
+        f"    {len(failures)} categories score exactly zero over "
+        f"{sum(row.samples for row in failures):,} samples: "
+        + ", ".join(row.name.lower() for row in failures)
+    )
+    low, high = disgust_false_positive_bounds(stress)
+    reported = stress.raw["reported_disgust_false_positives"]
+    print(
+        f"    the card's {reported:,} Disgust false positives sit outside the "
+        f"{low:,}-{high:,} its own precision allows"
+    )
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="emotion-timeline",
@@ -314,10 +404,26 @@ def build_parser() -> argparse.ArgumentParser:
     record_default = str(BENCHMARKS / "dataset" / "build-record.json")
     run_log_default = str(BENCHMARKS / "model-selection" / "run-log.csv")
     submitted_log_default = str(BENCHMARKS / "model-selection" / "submitted-log.json")
+    card_default = str(BENCHMARKS / "model" / "card-metrics.json")
 
     def add_selection_arguments(target: argparse.ArgumentParser) -> None:
         target.add_argument("--run-log", default=run_log_default)
         target.add_argument("--submitted-log", default=submitted_log_default)
+
+    model_parser = sub.add_parser(
+        "model",
+        help="audit the trained classifier against both surviving records of it",
+        description=(
+            "Two records of the classifier survive and they describe different "
+            "models: the group's model card claims DeBERTa-V2 evaluated "
+            "single-label, and the committed training script is DistilBERT "
+            "evaluated multi-label. The weights are gone from both university "
+            "repositories, so nothing here is rerun. What is checked is each "
+            "record's own arithmetic, and the identities that tell the two apart."
+        ),
+    )
+    model_parser.add_argument("--card-metrics", default=card_default)
+    model_parser.set_defaults(func=cmd_model)
 
     dataset_parser = sub.add_parser(
         "dataset",
@@ -376,6 +482,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     figures_parser.add_argument("--report", default=report_default)
     figures_parser.add_argument("--build-record", default=record_default)
+    figures_parser.add_argument("--card-metrics", default=card_default)
     add_selection_arguments(figures_parser)
     figures_parser.add_argument("--out", default="assets", help="output directory")
     figures_parser.add_argument(

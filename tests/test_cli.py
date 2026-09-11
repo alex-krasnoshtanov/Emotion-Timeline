@@ -105,9 +105,15 @@ def all_figures() -> set[str]:
     """Every figure the repository publishes, across every stage."""
     from emotion_timeline.analysis import error_analysis as ea
     from emotion_timeline.data import figures as ds_figures
+    from emotion_timeline.model import figures as model_figures
     from emotion_timeline.selection import figures as sel_figures
 
-    return set(ea.FIGURES) | set(ds_figures.FIGURES) | set(sel_figures.FIGURES)
+    return (
+        set(ea.FIGURES)
+        | set(ds_figures.FIGURES)
+        | set(sel_figures.FIGURES)
+        | set(model_figures.FIGURES)
+    )
 
 
 def test_figures_writes_every_figure_from_every_stage(
@@ -159,7 +165,7 @@ def test_a_subcommand_is_required() -> None:
 
 
 @pytest.mark.parametrize(
-    "command", ["wer", "errors", "figures", "dataset", "build-dataset", "models"]
+    "command", ["wer", "errors", "figures", "dataset", "build-dataset", "model", "models"]
 )
 def test_every_subcommand_documents_itself(
     command: str, capsys: pytest.CaptureFixture[str]
@@ -297,3 +303,40 @@ def test_figures_refuses_to_draw_an_inconsistent_selection_record(
     assert cli.main(["figures", "--submitted-log", str(broken), "--out", str(tmp_path)]) == 1
     assert "inconsistent report" in capsys.readouterr().err
     assert list(tmp_path.glob("*.png")) == []
+
+
+# --- model -------------------------------------------------------------------
+
+
+def test_model_prints_what_separates_the_two_records(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    assert cli.main(["model"]) == 0
+    out = capsys.readouterr().out
+    # the three evaluations and the six-class average
+    assert "64,250 samples" in out and "0.8995" in out
+    assert "(6 of 7 classes)" in out
+    assert "over all seven classes would be 0.2389" in out
+    # the identities that tell the records apart
+    assert "single-label" in out
+    assert "1.025 true labels per sample" in out
+    assert "30,522 tokens" in out and "128,100" in out
+    # the mislabelled table and the stress-test control
+    assert "called Neutral    are Joy" in out
+    assert "beats the control" in out
+    assert "score exactly zero over 561 samples" in out
+    assert "2,746-2,750" in out
+
+
+def test_model_refuses_an_inconsistent_record(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from emotion_timeline.model import card as mc
+
+    raw = json.loads(Path(mc.DEFAULT_CARD).read_text(encoding="utf-8"))
+    raw["card"]["evaluations"]["held_out"]["accuracy"] = 0.5
+    record = tmp_path / "broken.json"
+    record.write_text(json.dumps(raw), encoding="utf-8")
+
+    assert cli.main(["model", "--card-metrics", str(record)]) == 1
+    assert "inconsistent record" in capsys.readouterr().err

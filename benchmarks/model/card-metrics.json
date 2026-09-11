@@ -1,0 +1,207 @@
+{
+  "_comment": [
+    "Everything two surviving records say about the trained classifier, transcribed",
+    "so the arithmetic can be checked in a diff. Neither record can be rerun: the",
+    "weights are gone from both university repositories, and what survives of the",
+    "training run is three files, one of which is the metrics below.",
+    "",
+    "The two records do not describe the same model. `card` is the group's model",
+    "card, which claims DeBERTa-V2-Base evaluated single-label. `script` is the",
+    "committed training script's own output file, which is DistilBERT evaluated",
+    "multi-label. `docs/model.md` sets out how each of those is established from",
+    "the numbers rather than from the prose.",
+    "",
+    "Transcribed by hand from Task11/Model_card.md and",
+    "emotion_model_output/final_model/test_metrics.txt. Percentages the card",
+    "printed alongside its counts are not copied: they are recomputed, because two",
+    "of them were the give-away that its dataset table is mislabelled."
+  ],
+
+  "card": {
+    "_comment": [
+      "BredaUniversityADSAI/fae2-nlpr-group-group-14-1, Task11/Model_card.md.",
+      "claimed_* fields are what the card asserts about the architecture; they are",
+      "recorded to be checked, not because they are established."
+    ],
+    "claimed_architecture": "DeBERTa-V2-Base",
+    "claimed_task": "single-label",
+    "claimed_parameters_millions": 183,
+    "claimed_vocabulary_size": 128100,
+    "claimed_tokenizer": "SentencePiece (spm.model)",
+    "claimed_max_sequence_length": 512,
+    "claimed_epochs": 3,
+
+    "dataset_table": {
+      "_comment": [
+        "The card's dataset table, verbatim, including the label it attaches to",
+        "each count. The counts are right and the labels are not: see",
+        "`mislabelled_dataset_table` below. 'Happiness' is the card's spelling;",
+        "its own performance table calls the same class Joy."
+      ],
+      "total": 428331,
+      "rows": [
+        { "label": "Neutral", "samples": 149321 },
+        { "label": "Happiness", "samples": 127866 },
+        { "label": "Anger", "samples": 63532 },
+        { "label": "Sadness", "samples": 54041 },
+        { "label": "Surprise", "samples": 16075 },
+        { "label": "Fear", "samples": 13401 },
+        { "label": "Disgust", "samples": 9151 }
+      ]
+    },
+
+    "evaluations": {
+      "held_out": {
+        "_comment": "The card's held-out validation table. 64,250 samples.",
+        "samples": 64250,
+        "accuracy": 0.8995,
+        "macro_f1": 0.8127,
+        "micro_f1": 0.8995,
+        "weighted_f1": 0.9028,
+        "macro_precision": 0.8011,
+        "macro_recall": 0.8415,
+        "classes": {
+          "Anger": { "precision": 0.9122, "recall": 0.9381, "f1": 0.925, "support": 8695 },
+          "Disgust": { "precision": 0.6064, "recall": 0.9157, "f1": 0.7296, "support": 2147 },
+          "Fear": { "precision": 0.9543, "recall": 0.7513, "f1": 0.8407, "support": 8003 },
+          "Joy": { "precision": 0.959, "recall": 0.9374, "f1": 0.9481, "support": 22181 },
+          "Neutral": { "precision": 0.4438, "recall": 0.6323, "f1": 0.5215, "support": 2010 },
+          "Sadness": { "precision": 0.9396, "recall": 0.9427, "f1": 0.9412, "support": 18842 },
+          "Surprise": { "precision": 0.7922, "recall": 0.7732, "f1": 0.7826, "support": 2372 }
+        },
+        "confidence_when_correct": 0.8873,
+        "confidence_when_incorrect": 0.4275
+      },
+
+      "carer": {
+        "_comment": [
+          "External validation on 2,000 CARER samples. Five emotions: the corpus",
+          "has no disgust and no neutral, so the model's two weakest classes",
+          "cannot be scored and any prediction of them is automatically wrong.",
+          "The card says as much itself."
+        ],
+        "samples": 2000,
+        "accuracy": 0.9255,
+        "macro_f1": 0.8865,
+        "macro_precision": 0.8685,
+        "macro_recall": 0.9188,
+        "classes": {
+          "Anger": { "precision": 0.8318, "recall": 0.9709, "f1": 0.896, "support": 275 },
+          "Fear": { "precision": 0.933, "recall": 0.808, "f1": 0.866, "support": 224 },
+          "Joy": { "precision": 0.9949, "recall": 0.9204, "f1": 0.9562, "support": 854 },
+          "Sadness": { "precision": 0.9235, "recall": 0.9552, "f1": 0.9391, "support": 581 },
+          "Surprise": { "precision": 0.6596, "recall": 0.9394, "f1": 0.775, "support": 66 }
+        },
+        "confidence_when_correct": 0.9176,
+        "confidence_when_incorrect": 0.7082
+      },
+
+      "stress": {
+        "_comment": [
+          "5,000 synthetically generated adversarial samples. Six classes are",
+          "scored, not seven: Surprise is absent from the card's table, which is",
+          "why its macro average divides by six.",
+          "",
+          "reported_disgust_false_positives is the card's narrative figure. It",
+          "does not follow from the card's own Disgust precision, and that is a",
+          "finding rather than a transcription slip -- see docs/model.md."
+        ],
+        "samples": 5000,
+        "accuracy": 0.3144,
+        "macro_f1": 0.2787,
+        "macro_precision": 0.4802,
+        "macro_recall": 0.3876,
+        "reported_disgust_false_positives": 2753,
+        "classes": {
+          "Anger": { "precision": 0.0, "recall": 0.0, "f1": 0.0, "support": 1230 },
+          "Disgust": { "precision": 0.0763, "recall": 1.0, "f1": 0.1418, "support": 227 },
+          "Fear": { "precision": 1.0, "recall": 0.0545, "f1": 0.1033, "support": 863 },
+          "Joy": { "precision": 0.7858, "recall": 0.7324, "f1": 0.7582, "support": 1252 },
+          "Neutral": { "precision": 0.2938, "recall": 0.2776, "f1": 0.2854, "support": 508 },
+          "Sadness": { "precision": 0.7251, "recall": 0.2609, "f1": 0.3837, "support": 920 }
+        },
+        "confidence_when_correct": 0.5133,
+        "confidence_when_incorrect": 0.5321,
+        "outlier_types": [
+          { "name": "None (control)", "accuracy": 0.3147, "f1": 0.264, "samples": 3502 },
+          { "name": "Emoji-heavy", "accuracy": 0.7273, "f1": 0.6527, "samples": 187 },
+          { "name": "Typos/Slang", "accuracy": 0.7287, "f1": 0.6644, "samples": 188 },
+          { "name": "Subtle emotion", "accuracy": 0.5294, "f1": 0.4286, "samples": 187 },
+          { "name": "Extreme intensity", "accuracy": 0.2674, "f1": 0.2, "samples": 187 },
+          { "name": "Ambiguous", "accuracy": 0.2553, "f1": 0.1356, "samples": 188 },
+          { "name": "Sarcasm", "accuracy": 0.0, "f1": 0.0, "samples": 187 },
+          { "name": "Negation", "accuracy": 0.0, "f1": 0.0, "samples": 187 },
+          { "name": "Mixed emotions", "accuracy": 0.0, "f1": 0.0, "samples": 187 }
+        ]
+      }
+    }
+  },
+
+  "script": {
+    "_comment": [
+      "DatasetExperementation/finetune_transformer.py and the test_metrics.txt it",
+      "wrote, both in the individual repository. These are multi-label metrics:",
+      "hamming loss and subset accuracy have no single-label meaning, and micro F1",
+      "differs from subset accuracy, which for single-label evaluation it cannot.",
+      "",
+      "config_* is read off the committed Config class. Note that it names a",
+      "different input file from the one the card names, and that its split is",
+      "unstratified -- train_test_split is called with shuffle=True and no",
+      "stratify argument."
+    ],
+    "config_model_name": "distilbert-base-uncased",
+    "config_problem_type": "multi_label_classification",
+    "config_data_path": "Super-Iter1.parquet",
+    "config_max_length": 128,
+    "config_batch_size": 16,
+    "config_learning_rate": 2e-5,
+    "config_epochs": 5,
+    "config_test_size": 0.15,
+    "config_val_size": 0.15,
+    "config_random_state": 42,
+    "config_stratified": false,
+    "config_decision_threshold": 0.5,
+
+    "surviving_tokenizer_tokens": 30522,
+    "surviving_files": [
+      "emotion_model_output/final_model/test_metrics.txt",
+      "emotion_model_output/final_model/training_args.bin",
+      "emotion_model_output/final_model/vocab.txt"
+    ],
+
+    "test_metrics": {
+      "hamming_loss": 0.0357,
+      "f1_macro": 0.8068,
+      "f1_micro": 0.8724,
+      "precision_macro": 0.8775,
+      "precision_micro": 0.9154,
+      "recall_macro": 0.755,
+      "recall_micro": 0.8332,
+      "subset_accuracy": 0.8279
+    }
+  },
+
+  "mislabelled_dataset_table": {
+    "_comment": [
+      "What the card's dataset counts actually belong to. Established two ways,",
+      "neither of which uses the card's prose: the counts are exactly the state",
+      "this repository's own build passes through after drop-love and before the",
+      "priority collapse, and the card's own support column is 15% of the correct",
+      "assignment in all seven classes. The labels were attached to a",
+      "descending-sorted column and four of the seven landed on the wrong row.",
+      "",
+      "Anger and Surprise are correct by coincidence -- they occupy the same rank",
+      "under both assignments."
+    ],
+    "corrected": {
+      "149321": "Joy",
+      "127866": "Sadness",
+      "63532": "Anger",
+      "54041": "Fear",
+      "16075": "Surprise",
+      "13401": "Neutral"
+    },
+    "synthetic_disgust_rows": 9151,
+    "correct_by_coincidence": ["Anger", "Surprise"]
+  }
+}
