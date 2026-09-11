@@ -141,6 +141,21 @@ every pull request and the two cannot drift.
 
 ## Never commit
 
+- **Credentials, of any shape.** The upstream notebook opened with
+  `os.environ["HF_TOKEN"] = "hf_..."` — a live read-scoped token on a personal
+  account, readable by every member of the university organisation for a year. A
+  read token pulls any private or gated repository as its owner. It was also
+  unnecessary: the dataset it fetched is public.
+
+  `detect-private-key` does not catch that — it only matches PEM and SSH
+  headers — so the `no-credentials` hook matches provider prefixes instead
+  (`hf_`, `ghp_`, `sk-`, `AKIA`, and the rest). Keys come from the environment
+  via `credentials.py`, or from a gitignored `.env`; `.env.example` carries the
+  names and never a value.
+
+  **No committed command needs a key.** `test_no_committed_command_requires_a_credential`
+  runs each one with the environment stripped. Keep it that way: a reader
+  reproducing the study should not need an account anywhere.
 - **Client material.** The original group repo holds labelled transcripts
   supplied by the Content Intelligence Agency. Those stay out.
 - **Media.** The upstream repo carries ~700 MB of downloaded YouTube audio. One

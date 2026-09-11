@@ -49,6 +49,12 @@ shape.
 
 ## What must not come across
 
+- **Credentials.** `DatasetExperementation/SuperEmotions.ipynb` opens with a live
+  `hf_...` token in cell 1. Assume there are others: coursework notebooks are
+  written to run, not to be published. Check any fetched notebook's first few
+  cells before you read further, and never paste a found key into a file "to
+  test" — the `no-credentials` pre-commit hook will refuse the commit anyway.
+  If you find one, tell Alex which account and scope so it can be revoked.
 - **Client material.** `Task6/data/raw/*.xlsx` are labelled transcripts supplied
   by the Content Intelligence Agency. Out, without exception.
 - **Media.** ~700 MB of YouTube audio under `Pipeline_src/batch_output/`.

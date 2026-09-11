@@ -496,6 +496,14 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    # Loaded before dispatch so a subcommand never has to think about it. No
+    # command committed so far needs a key -- everything reads from benchmarks/
+    # -- but the stages that call a hosted service will, and this is the one
+    # place they get it from. An exported variable always wins over the file.
+    from emotion_timeline import credentials
+
+    credentials.load_env_file()
+
     args = build_parser().parse_args(argv)
     return int(args.func(args))
 

@@ -340,6 +340,19 @@ exists, and the test suite runs before a push. CI enforces the same set — its
 lint job *is* `pre-commit run --all-files` — so a green commit hook means a green
 pull request.
 
+### Credentials
+
+There are none to configure. The source corpus is public and ungated and every
+published number derives from files under `benchmarks/`, so the whole study
+reproduces with no account anywhere — a test asserts it, running each command
+with the environment stripped.
+
+For the stages that will call a hosted service, keys come from the environment
+or a gitignored `.env`; `cp .env.example .env` and fill in what you need. An
+exported variable always wins over the file. A `no-credentials` pre-commit hook
+refuses anything shaped like a token, because the coursework this rebuilds
+carried a live one in a notebook for a year.
+
 Tests carry a 95% coverage floor. It is not a quality score: rendering a result
 is easy and verifying one is easy to skip, and everything this repository claims
 rests on its numbers being checked.

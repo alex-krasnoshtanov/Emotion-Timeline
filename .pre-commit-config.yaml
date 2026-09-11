@@ -41,6 +41,32 @@ repos:
 
   - repo: local
     hooks:
+      # `detect-private-key` above only matches PEM and SSH key headers. It
+      # passes a Hugging Face token clean, which is how one sat in a notebook in
+      # the upstream coursework repository for a year: a read-scoped token on a
+      # personal account, enough to pull any private or gated repo as its owner.
+      #
+      # Provider prefixes rather than entropy heuristics: a false positive here
+      # blocks a commit, so the patterns only match strings that cannot be
+      # anything but a credential.
+      - id: no-credentials
+        name: refuse anything shaped like an API token
+        language: pygrep
+        types: [text]
+        exclude: '^(\.pre-commit-config\.yaml|\.env\.example)$'
+        entry: |
+          (?x)
+          hf_[A-Za-z0-9]{30,}
+          | gh[pousr]_[A-Za-z0-9]{30,}
+          | github_pat_[A-Za-z0-9_]{50,}
+          | sk-(proj-)?[A-Za-z0-9_-]{20,}
+          | sk-ant-[A-Za-z0-9_-]{20,}
+          | AKIA[0-9A-Z]{16}
+          | xox[abprs]-[A-Za-z0-9-]{10,}
+          | AIza[0-9A-Za-z_-]{35}
+          | glpat-[A-Za-z0-9_-]{20,}
+          | -----BEGIN\s+[A-Z ]*PRIVATE\s+KEY-----
+
       # The "never commit" list in CLAUDE.md, made mechanical. Client-supplied
       # transcripts, downloaded media, the rebuilt dataset and model weights all
       # have somewhere else to live; none of them belong in git history, where
