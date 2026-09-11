@@ -50,6 +50,13 @@ So when you add a result:
 - **`check_consistency()` gates rendering.** If a report's numbers contradict
   each other, `emotion-timeline figures` exits non-zero rather than drawing the
   contradiction as a picture. Keep it that way.
+- **Recovering an evaluation-set size from an accuracy stays conservative.**
+  `selection/runs.py` reads a *divisor* of the size out of the fraction, never
+  the size, and returns `None` for the 22 rows the log rounded to four decimals.
+  Both limits are load-bearing: the withdrawal of the benchmark's ranking rests
+  on two divisors having no plausible common multiple, and that argument only
+  holds because it never guesses a size. Do not add a best-guess path, and do
+  not lower `MIN_DECIMALS`.
 - **CI runs on pull requests, not only on `main`.** The sibling repo DSL-Learning
   gets this wrong: its frontend compiles only in the image build on `main`, so a
   breaking change passes review and fails after merge.
@@ -69,10 +76,12 @@ benchmarks/           committed inputs every published number derives from
   stt/                annotated transcripts (hand-marked S/I/D per segment)
   error-analysis/     recorded evaluation statistics
   dataset/            the recorded build: every step's row count, every class
+  model-selection/    both surviving records of the nine-family benchmark
 src/emotion_timeline/
   stt/                transcriber adapters + the WER harness
   analysis/           error analysis over model predictions
   data/               dataset construction from the public corpus
+  selection/          the audit of the inherited model comparison
   figures.py          palette, styling and the staleness stamp, shared
   cli.py              one subcommand per stage
 docs/                 one chapter per stage, each ending in what it does NOT show
@@ -92,6 +101,7 @@ uv run pre-commit run --all-files   # everything the lint job runs
 
 uv run emotion-timeline wer --window 0:00-18:09   # speech-to-text comparison
 uv run emotion-timeline dataset                   # what the training set is made of
+uv run emotion-timeline models                    # audit of the nine-family benchmark
 uv run emotion-timeline errors                    # where the classifier fails
 uv run emotion-timeline figures --out assets      # regenerate every figure, every stage
 

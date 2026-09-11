@@ -92,6 +92,8 @@ def _stages(args: argparse.Namespace) -> list[tuple[str, Any, Any, Any]]:
     from emotion_timeline.analysis import error_analysis
     from emotion_timeline.data import build as dataset
     from emotion_timeline.data import figures as dataset_figures
+    from emotion_timeline.selection import figures as selection_figures
+    from emotion_timeline.selection import runs as selection
 
     return [
         (
@@ -105,6 +107,12 @@ def _stages(args: argparse.Namespace) -> list[tuple[str, Any, Any, Any]]:
             dataset.DatasetReport.load(args.build_record),
             dataset_figures.FIGURES,
             dataset.check_consistency,
+        ),
+        (
+            "model-selection",
+            selection.SelectionReport.load(args.run_log, args.submitted_log),
+            selection_figures.FIGURES,
+            selection.check_consistency,
         ),
     ]
 
@@ -168,6 +176,22 @@ def cmd_errors(args: argparse.Namespace) -> int:
             f"{body['error_rate_absent'] * 100:5.2f}% without "
             f"({body['present_samples']:,} samples)"
         )
+    return 0
+
+
+def cmd_models(args: argparse.Namespace) -> int:
+    """Audit the nine-family benchmark, from both of its surviving records."""
+    from emotion_timeline.selection import runs as selection
+
+    report = selection.SelectionReport.load(args.run_log, args.submitted_log)
+    problems = selection.check_consistency(report)
+    for problem in problems:
+        print(f"inconsistent record: {problem}", file=sys.stderr)
+    if problems:
+        return 1
+
+    for line in selection.describe(report):
+        print(line)
     return 0
 
 
@@ -288,6 +312,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     report_default = str(BENCHMARKS / "error-analysis" / "held-out-64250.json")
     record_default = str(BENCHMARKS / "dataset" / "build-record.json")
+    run_log_default = str(BENCHMARKS / "model-selection" / "run-log.csv")
+    submitted_log_default = str(BENCHMARKS / "model-selection" / "submitted-log.json")
+
+    def add_selection_arguments(target: argparse.ArgumentParser) -> None:
+        target.add_argument("--run-log", default=run_log_default)
+        target.add_argument("--submitted-log", default=submitted_log_default)
 
     dataset_parser = sub.add_parser(
         "dataset",
@@ -325,12 +355,28 @@ def build_parser() -> argparse.ArgumentParser:
     errors_parser.add_argument("--report", default=report_default)
     errors_parser.set_defaults(func=cmd_errors)
 
+    models_parser = sub.add_parser(
+        "models",
+        help="audit the nine-family model comparison the project inherited",
+        description=(
+            "Reads both surviving records of the benchmark and reports what they "
+            "establish, which is less than the coursework claimed. Neither log can "
+            "be recomputed -- the runs are gone and the dataset behind the earliest "
+            "of them is client material -- so the arithmetic here is a cross-check "
+            "between the two, plus what each run's own accuracy proves about the "
+            "evaluation set it was scored over."
+        ),
+    )
+    add_selection_arguments(models_parser)
+    models_parser.set_defaults(func=cmd_models)
+
     figures_parser = sub.add_parser(
         "figures",
         help="render the README figures from the recorded statistics",
     )
     figures_parser.add_argument("--report", default=report_default)
     figures_parser.add_argument("--build-record", default=record_default)
+    add_selection_arguments(figures_parser)
     figures_parser.add_argument("--out", default="assets", help="output directory")
     figures_parser.add_argument(
         "--check",

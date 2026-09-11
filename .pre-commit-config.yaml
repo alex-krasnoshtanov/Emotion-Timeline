@@ -64,12 +64,18 @@ repos:
       # Figures are drawn from the committed statistics and carry the digest of
       # the report they came from, so they can go stale silently. This is the
       # same check CI runs.
+      #
+      # The filter covers every stage rather than naming them one at a time: it
+      # named only the error-analysis paths until the dataset and model-selection
+      # stages landed, which meant a commit touching their records skipped the
+      # check locally and only failed in CI. A stage added later is covered
+      # without anybody remembering to come back here.
       - id: figures-current
         name: figures match the data they claim to show
         language: system
         entry: uv run emotion-timeline figures --out assets --check
         pass_filenames: false
-        files: '^(assets/|benchmarks/error-analysis/|src/emotion_timeline/analysis/)'
+        files: '^(assets/|benchmarks/|src/emotion_timeline/)'
 
       # On push rather than on commit: the suite takes a few seconds, which is
       # fine before a push and irritating on every commit.

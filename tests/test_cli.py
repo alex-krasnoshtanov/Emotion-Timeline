@@ -105,8 +105,9 @@ def all_figures() -> set[str]:
     """Every figure the repository publishes, across every stage."""
     from emotion_timeline.analysis import error_analysis as ea
     from emotion_timeline.data import figures as ds_figures
+    from emotion_timeline.selection import figures as sel_figures
 
-    return set(ea.FIGURES) | set(ds_figures.FIGURES)
+    return set(ea.FIGURES) | set(ds_figures.FIGURES) | set(sel_figures.FIGURES)
 
 
 def test_figures_writes_every_figure_from_every_stage(
@@ -157,7 +158,9 @@ def test_a_subcommand_is_required() -> None:
         cli.main([])
 
 
-@pytest.mark.parametrize("command", ["wer", "errors", "figures", "dataset", "build-dataset"])
+@pytest.mark.parametrize(
+    "command", ["wer", "errors", "figures", "dataset", "build-dataset", "models"]
+)
 def test_every_subcommand_documents_itself(
     command: str, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -243,3 +246,54 @@ def test_build_dataset_explains_the_missing_extra(
     monkeypatch.setattr(ds, "load_source", no_datasets)
     assert cli.main(["build-dataset"]) == 1
     assert "--extra data" in capsys.readouterr().err
+
+
+# --- models ------------------------------------------------------------------
+
+
+def test_models_prints_the_audit_the_readme_summarises(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    assert cli.main(["models"]) == 0
+    out = capsys.readouterr().out
+    assert "8 submitted rows, 101 logged runs" in out
+    assert "79 of 101 accuracies" in out
+    assert "27 distinct divisors" in out
+    assert "6,044,800 samples" in out
+    # Both halves of the finding: the ranking moves under the other average,
+    # and the two headline runs were scored on different data.
+    assert "gru #6" in out and "3 places up" in out
+    assert "pytorch_mlp_gpu" in out and "divisible by 3,200" in out
+    assert "distilbert" in out and "divisible by 1,889" in out
+    assert "Neutral capped at 10,000" in out and "Neutral capped at  6,000" in out
+    assert "17 of the 101 runs are provably a model that answered with one class" in out
+
+
+def test_models_refuses_an_inconsistent_record(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from emotion_timeline.selection import runs as sel
+
+    raw = json.loads(Path(sel.DEFAULT_SUBMITTED_LOG).read_text(encoding="utf-8"))
+    raw["rows"][0]["recall_weighted"] = 0.5
+    broken = tmp_path / "broken.json"
+    broken.write_text(json.dumps(raw), encoding="utf-8", newline="\n")
+
+    assert cli.main(["models", "--submitted-log", str(broken)]) == 1
+    assert "inconsistent record" in capsys.readouterr().err
+
+
+def test_figures_refuses_to_draw_an_inconsistent_selection_record(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The rendering gate is per stage, and this stage sits behind it too."""
+    from emotion_timeline.selection import runs as sel
+
+    raw = json.loads(Path(sel.DEFAULT_SUBMITTED_LOG).read_text(encoding="utf-8"))
+    raw["rows"][3]["neutral_cap"] = 4000
+    broken = tmp_path / "broken.json"
+    broken.write_text(json.dumps(raw), encoding="utf-8", newline="\n")
+
+    assert cli.main(["figures", "--submitted-log", str(broken), "--out", str(tmp_path)]) == 1
+    assert "inconsistent report" in capsys.readouterr().err
+    assert list(tmp_path.glob("*.png")) == []
