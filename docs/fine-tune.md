@@ -172,8 +172,12 @@ tone.
 
 ## What was shipped, and what was kept
 
-The weights are 257 MB and ship as a release asset with a recorded SHA-256. The
-62,877 per-sample predictions are 7 MB and ship beside them.
+The weights are a 268 MB `safetensors` file and the 62,877 per-sample predictions
+a 7 MB archive. Neither belongs in git, so both ship as assets on the
+`weights-v1` release, and
+[`weights.py`](../src/emotion_timeline/weights.py) pins the checkpoint's SHA-256
+at `a4095f78…`. A download whose digest differs is deleted rather than cached: a
+substituted checkpoint does not fail, it quietly predicts something else.
 
 **Keeping the predictions is the point.** `error-analysis.md` renders from a
 summary because the original run's predictions were not saved, and that is the
