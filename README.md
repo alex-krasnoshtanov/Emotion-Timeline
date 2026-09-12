@@ -34,7 +34,7 @@ and which of the model's answers not to believe.
 flowchart TD
     stt["<b>1. Which transcriber?</b><br/>Whisper vs AssemblyAI, scored by WER"]
     data["<b>2. What to train on?</b><br/>one public corpus, 552,821 rows in, 428,331 out"]
-    model["<b>3. What to train?</b><br/>nine model families, then a transformer"]
+    model["<b>3. What to train?</b><br/>nine families audited, then one fine-tuned"]
     err["<b>4. When is it wrong?</b><br/>error analysis over 64,250 predictions"]
     xai["<b>5. How far does it hold?</b><br/>masking, against a real control"]
     pipe["<b>6. The timeline</b><br/>transcript in, emotion timeline out"]
@@ -250,6 +250,68 @@ Full write-up: [`docs/model.md`](docs/model.md).
 
 ---
 
+## Result: a model that exists
+
+Every section above audits a record whose artefact is gone. This one trains a
+classifier on the dataset rebuilt above, keeps everything it predicted, and
+measures it against the card the section before takes apart.
+
+```bash
+uv run emotion-timeline training      # reads only committed records
+```
+
+DistilBERT on 293,426 rows, three epochs, 11.6 minutes on an RTX 5070. Over
+62,877 held-out rows: **accuracy 0.9164**, macro F1 0.8088, weighted F1 0.9164.
+The card reports 0.8995 and 0.8127 over its own 64,250.
+
+| Class | Card | Here | |
+| --- | ---: | ---: | ---: |
+| Neutral | 0.5215 | **0.5636** | +0.0421 |
+| Anger | 0.9250 | **0.9370** | +0.0120 |
+| Sadness | 0.9412 | **0.9525** | +0.0113 |
+| Joy | 0.9481 | **0.9587** | +0.0106 |
+| Fear | 0.8407 | **0.8495** | +0.0088 |
+| Surprise | 0.7826 | 0.7784 | −0.0042 |
+| Disgust | 0.7296 | — | not comparable |
+
+**Accuracy up, macro F1 down, and the whole of the difference is Disgust.** Macro
+averaging weights it like Joy, and 9,151 of the card's 14,316 Disgust rows are the
+synthetic file that did not survive — 64% of the class. So no Disgust comparison
+is published, and that is enforced in code rather than footnoted: the command
+prints a reason where the number would go, and a test asserts it never prints one.
+
+### The finding that reproduces on a model that exists
+
+The error analysis above was of a model nobody has. Its central result holds here
+on one that does:
+
+| Marker | Error rate with | without |
+| --- | ---: | ---: |
+| ALL-CAPS word | 52.10% | 7.84% |
+| Question mark | 51.84% | 7.53% |
+| Exclamation mark | 50.10% | 6.94% |
+
+Two fine-tunes, months apart, on data one of them cannot fully reproduce, and
+three pieces of typography still take the model from nine-in-ten right to worse
+than a coin flip.
+
+### Two questions the earlier chapters left open
+
+**Calibration.** The model is overconfident. One temperature of 1.499, fitted on
+validation and applied to the held-out set, cuts expected calibration error from
+0.0245 to 0.0074 and cannot change accuracy at all. A threshold is still not a
+fix: 1,448 of the 5,254 errors are made at 0.7 or above.
+
+**The URL bug.** The dataset chapter reproduces a bug that strips `://` out of
+URLs before masking, and says its effect "belongs with a retrain". The 244
+held-out rows carrying a mangled `http/` fragment are wrong **47.13%** of the
+time against 8.20% elsewhere. Whether the mangling is the cause stays open: only
+12 rows reached `[URL]` masking intact, far too few to compare against.
+
+Full chapter: [`docs/fine-tune.md`](docs/fine-tune.md).
+
+---
+
 ## Result: where the classifier fails
 
 Accuracy of **89.95%** over 64,250 held-out samples, and the interesting part is
@@ -392,13 +454,13 @@ numbers from a command, and ends its chapter by saying what it does not establis
 | Which model family | `models` | [model-selection.md](docs/model-selection.md) |
 | The trained classifier's records | `model` | [model.md](docs/model.md) |
 | Where it fails | `errors` | [error-analysis.md](docs/error-analysis.md) |
+| A model that exists | `split`, `fine-tune`, `summarise`, `training` | [fine-tune.md](docs/fine-tune.md) |
 
-**Still open.** A fine-tune on the rebuilt dataset, shipping weights as a release
-asset with a recorded digest — the original weights are absent from both
-university repositories, so there is nothing to ship until one is trained. Then a
-per-scene timeline over the transcript this repository already commits. The nine
-families rerun on one feature pipeline and one held-out split is the third, and
-the only thing that would repair the ranking withdrawn above.
+**Still open.** A per-scene timeline over the transcript this repository already
+commits, which is the thing the title promises and the one stage that would tie
+the others together in a picture. The nine families rerun on one feature pipeline
+and one held-out split is the other, and the only thing that would repair the
+ranking withdrawn above.
 
 **Deliberately absent.**
 

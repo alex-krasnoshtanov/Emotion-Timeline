@@ -214,3 +214,58 @@ def test_a_matrix_over_different_classes_is_caught(tmp_path: Path) -> None:
 
 def test_the_two_records_together_have_one_digest() -> None:
     assert len(committed().digest) == 64
+
+
+# --- the chapter quotes the record --------------------------------------------
+
+
+def chapter() -> str:
+    return (Path(__file__).resolve().parents[1] / "docs" / "fine-tune.md").read_text(
+        encoding="utf-8"
+    )
+
+
+def test_every_score_the_chapter_prints_is_in_the_record() -> None:
+    """Written because quoting a figure forward is how the card's table went wrong."""
+    text = chapter()
+    report = committed()
+    assert f"{report.accuracy:.4f}" in text
+    assert f"{evaluate.macro(report.scores, 'f1'):.4f}" in text
+    for score in report.scores:
+        assert f"{score.precision:.4f}" in text
+        assert f"{score.recall:.4f}" in text
+        assert f"{score.f1:.4f}" in text
+
+
+def test_the_chapter_quotes_the_calibration_and_the_url_subset() -> None:
+    text = chapter()
+    report = committed()
+    calibration = report.calibration
+    assert f"{calibration['temperature']:.3f}" in text
+    assert f"{calibration['before']['expected_calibration_error']:.4f}" in text
+    assert f"{calibration['after']['expected_calibration_error']:.4f}" in text
+    mangled = report.summary["url_bug"]["mangled"]
+    assert f"{mangled['error_rate']:.2%}" in text
+    assert str(mangled["samples"]) in text
+
+
+def test_the_chapter_says_disgust_is_not_comparable() -> None:
+    assert "not comparable" in chapter()
+    assert "9,151" in chapter()
+
+
+def test_the_chapter_ends_by_saying_what_it_does_not_establish() -> None:
+    """The house pattern, and the section that keeps the rest of it honest."""
+    assert "## What this does not establish" in chapter()
+
+
+def test_the_readme_quotes_the_same_numbers_as_the_chapter() -> None:
+    """The README is read first and checked least, so it is asserted too."""
+    readme = (Path(__file__).resolve().parents[1] / "README.md").read_text(encoding="utf-8")
+    report = committed()
+    assert f"{report.accuracy:.4f}" in readme
+    assert f"{evaluate.macro(report.scores, 'f1'):.4f}" in readme
+    for row in training.compare_to_card(report, card()):
+        if row.retrain_f1 is not None:
+            assert f"{row.retrain_f1:.4f}" in readme
+    assert "not comparable" in readme

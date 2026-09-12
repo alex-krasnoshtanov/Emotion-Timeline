@@ -667,7 +667,8 @@ def test_summarise_turns_kept_logits_into_the_chapters_record(
     assert record["total_samples"] == manifest.part(splits.TEST)["rows"]
     assert set(record["classes"]) == set(EMOTIONS)
     assert "temperature" in record["calibration"]
-    assert record["url_bug"]["marker"] == "https/"
+    assert record["url_bug"]["mangled"]["marker"] == "http/"
+    assert record["url_bug"]["masked"]["marker"] == "[URL]"
 
     report = ea.ErrorReport.load(out)
     assert ea.check_consistency(report) == []

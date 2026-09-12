@@ -155,20 +155,25 @@ def vocabulary_bias(
     for text, hit in zip(texts, correct, strict=True):
         (right if hit else wrong).update(set(WORD.findall(text.lower())))
 
-    rates: dict[str, float] = {}
+    rates: dict[str, tuple[float, int]] = {}
     for word in set(right) | set(wrong):
         total = right[word] + wrong[word]
         if total >= minimum:
-            rates[word] = wrong[word] / total
+            rates[word] = (wrong[word] / total, total)
 
-    ordered = sorted(rates, key=lambda word: (-rates[word], word))
+    # Ties are broken by how often the word appears, not alphabetically. Plenty of
+    # words sit at exactly zero, and sorting those by name lists whatever happens
+    # to come last in the alphabet rather than whatever carries the most evidence.
+    worst = sorted(rates, key=lambda word: (-rates[word][0], -rates[word][1], word))
+    best = sorted(rates, key=lambda word: (rates[word][0], -rates[word][1], word))
     return {
         "_comment": (
             f"Words appearing at least {minimum} times, ranked by the share of their "
-            "occurrences that sit in a wrong prediction."
+            "occurrences that sit in a wrong prediction, ties broken by how often "
+            "the word appears."
         ),
-        "error_biased": ordered[:top],
-        "correct_biased": ordered[-top:][::-1] if ordered else [],
+        "error_biased": worst[:top],
+        "correct_biased": best[:top],
     }
 
 

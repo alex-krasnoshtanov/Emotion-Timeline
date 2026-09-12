@@ -183,7 +183,7 @@
     }
   },
   "vocabulary": {
-    "_comment": "Words appearing at least 40 times, ranked by the share of their occurrences that sit in a wrong prediction.",
+    "_comment": "Words appearing at least 40 times, ranked by the share of their occurrences that sit in a wrong prediction, ties broken by how often the word appears.",
     "error_biased": [
       "won't",
       "didn't",
@@ -192,11 +192,11 @@
       "can't"
     ],
     "correct_biased": [
-      "wronged",
-      "worthwhile",
-      "wimpy",
-      "whiney",
-      "welcomed"
+      "successful",
+      "unsure",
+      "defeated",
+      "numb",
+      "determined"
     ]
   },
   "confidence": {

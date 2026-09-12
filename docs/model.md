@@ -200,3 +200,5 @@ to ship.
 - **That retraining would reproduce any of this.** The dataset rebuilds exactly
   ([`dataset.md`](dataset.md)), so a fresh fine-tune is possible, but it would be
   a new model with new numbers and would not settle what these records say.
+  [`fine-tune.md`](fine-tune.md) is that model: it beats this table on five of the
+  six classes comparable to it, and settles none of the questions above.
