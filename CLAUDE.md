@@ -85,7 +85,7 @@ benchmarks/           committed inputs every published number derives from
   dataset/            the recorded build: every step's row count, every class
   model-selection/    both surviving records of the nine-family benchmark
 src/emotion_timeline/
-  stt/                transcriber adapters + the WER harness
+  stt/                the word error rate harness
   analysis/           error analysis over model predictions
   data/               dataset construction from the public corpus
   selection/          the audit of the inherited model comparison

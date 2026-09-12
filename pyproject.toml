@@ -35,10 +35,6 @@ dev = [
     "pandas-stubs>=2.2",
     "pre-commit>=3.8",
 ]
-stt = [
-    "faster-whisper>=1.1",
-    "assemblyai>=0.34",
-]
 # Only `build-dataset` needs this: it downloads the 552,821-row source corpus.
 # Reading the recorded build with `emotion-timeline dataset` needs nothing.
 data = [
@@ -49,11 +45,6 @@ model = [
     "transformers>=4.44",
     "datasets>=3.0",
     "scikit-learn>=1.5",
-]
-demo = [
-    "fastapi>=0.115",
-    "uvicorn[standard]>=0.30",
-    "python-multipart>=0.0.9",
 ]
 
 [project.scripts]
@@ -126,10 +117,7 @@ pretty = true
 # for real. Extend this list as the later stages land.
 [[tool.mypy.overrides]]
 module = [
-    "assemblyai.*",
-    "captum.*",
     "datasets.*",
-    "faster_whisper.*",
     "sklearn.*",
     "transformers.*",
 ]

@@ -71,7 +71,7 @@ KNOWN: dict[str, Credential] = {
         variable="ASSEMBLYAI_API_KEY",
         purpose="AssemblyAI key, for transcribing new audio with the winning system.",
         obtain_from="https://www.assemblyai.com/app/account",
-        needed_by="the AssemblyAI adapter (--extra stt); the committed benchmark needs none",
+        needed_by="transcribing new audio; every committed command needs none",
     ),
 }
 

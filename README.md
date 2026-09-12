@@ -21,11 +21,10 @@ before the classifier meant anything: which speech-to-text system to trust, what
 to train on when no single emotion dataset covers seven classes in two languages,
 and which of the model's answers not to believe.
 
-> **Status: rebuild in progress.** This repository is a ground-up rewrite of
-> coursework originally done at Breda University of Applied Sciences, September
-> to November 2025. Each layer lands as it is finished; see
-> [Roadmap](#roadmap) for what is here and what is not. See
-> [Credits](#credits) for who wrote what the first time round.
+> A ground-up rewrite of coursework originally done at Breda University of
+> Applied Sciences, September to November 2025. [Scope](#scope) says what this
+> covers and what it leaves out on purpose; [Credits](#credits) says who wrote
+> what the first time round.
 
 ---
 
@@ -34,11 +33,11 @@ and which of the model's answers not to believe.
 ```mermaid
 flowchart TD
     stt["<b>1. Which transcriber?</b><br/>Whisper vs AssemblyAI, scored by WER"]
-    data["<b>2. What to train on?</b><br/>three public sets merged to 428,331 rows"]
+    data["<b>2. What to train on?</b><br/>one public corpus, 552,821 rows in, 428,331 out"]
     model["<b>3. What to train?</b><br/>nine model families, then a transformer"]
     err["<b>4. When is it wrong?</b><br/>error analysis over 64,250 predictions"]
-    xai["<b>5. Why is it wrong?</b><br/>attribution and masking"]
-    pipe["<b>6. The pipeline</b><br/>video in, emotion timeline out"]
+    xai["<b>5. How far does it hold?</b><br/>masking, against a real control"]
+    pipe["<b>6. The timeline</b><br/>transcript in, emotion timeline out"]
 
     stt --> data --> model --> err --> xai --> pipe
 ```
@@ -323,8 +322,8 @@ uv run pytest
 The core install is deliberately light — numpy, pandas, matplotlib, scipy. Nothing
 that needs a GPU or a paid API key is a required dependency, so reading the
 results costs a few seconds rather than a torch download. The heavier pieces are
-extras: `--extra stt` for the transcriber adapters, `--extra model` for training,
-`--extra demo` for the browser demo.
+extras: `--extra data` to rebuild the training set from source, `--extra model`
+to fine-tune or run the classifier.
 
 pip works too: `pip install -e ".[dev]"`.
 
@@ -368,7 +367,7 @@ benchmarks/dataset/      the recorded build: every row count, every class
 benchmarks/model-selection/  both surviving records of the nine-family benchmark
 benchmarks/model/        both surviving records of the trained classifier
 src/emotion_timeline/
-  stt/                   transcriber adapters + the WER harness
+  stt/                   the word error rate harness
   analysis/              error analysis over model predictions
   data/                  dataset construction from the public corpus
   selection/             the audit of the inherited model comparison
@@ -381,21 +380,44 @@ tests/                   the arithmetic, and the mistakes worth pinning
 
 ---
 
-## Roadmap
+## Scope
 
-- [x] Speech-to-text benchmark, with the window bug fixed and pinned
-- [x] Error analysis: 64,250 predictions, four figures, cross-checked
-- [x] Dataset build: 428,331 rows reproduced from the public corpus, funnel and all
-- [x] Model selection: the inherited nine-family benchmark audited, its ranking withdrawn
-- [x] The trained model audited against both surviving records of it
-- [ ] The nine families rerun on one feature pipeline and one held-out split
-- [ ] A fresh fine-tune on the rebuilt dataset, weights as a release asset with a
-      recorded digest — the original weights are gone, so there is nothing to ship
-      until one is trained
-- [ ] Explainability: attribution and masking robustness
-- [ ] Prompted-LLM baseline
-- [ ] The nine-stage pipeline, containerised
-- [ ] Browser demo
+Five stages are in. Each one commits the inputs it derives from, recomputes its
+numbers from a command, and ends its chapter by saying what it does not establish.
+
+| Stage | Command | Chapter |
+| --- | --- | --- |
+| Which speech-to-text system | `wer` | [stt-benchmark.md](docs/stt-benchmark.md) |
+| What it was trained on | `dataset`, `build-dataset` | [dataset.md](docs/dataset.md) |
+| Which model family | `models` | [model-selection.md](docs/model-selection.md) |
+| The trained classifier's records | `model` | [model.md](docs/model.md) |
+| Where it fails | `errors` | [error-analysis.md](docs/error-analysis.md) |
+
+**Still open.** A fine-tune on the rebuilt dataset, shipping weights as a release
+asset with a recorded digest — the original weights are absent from both
+university repositories, so there is nothing to ship until one is trained. Then a
+per-scene timeline over the transcript this repository already commits. The nine
+families rerun on one feature pipeline and one held-out split is the third, and
+the only thing that would repair the ranking withdrawn above.
+
+**Deliberately absent.**
+
+- **No attribution analysis.** Attribution maps have no ground truth to be
+  checked against, and the rule here is that every published number is
+  reproducible or cross-checked. Masking robustness measures accuracy deltas, so
+  that half stays in scope.
+- **No prompted-LLM baseline.** It was the group's work, none of its prompts or
+  predictions survive to reproduce it from, and adding it would mean this study
+  needs an API key. It currently needs none, and
+  `test_no_committed_command_requires_a_credential` keeps it that way.
+- **No video-ingest pipeline.** The timeline runs over a committed, timestamped
+  transcript, so download, scene detection and audio preprocessing would buy a
+  reader nothing and cost several hundred megabytes of media.
+- **No Docker image and no docs site.**
+  [Detection-by-Shadow](https://github.com/alex-krasnoshtanov/Detection-by-Shadow)
+  carries the container and the browser demo;
+  [DSL-Learning](https://github.com/alex-krasnoshtanov/DSL-Learning) carries the
+  mkdocs site. This repository is the study, and it installs in a few seconds.
 
 ---
 
@@ -424,12 +446,13 @@ neither would have surfaced from quoting the figures forward.
 
 MIT — see [LICENSE](LICENSE).
 
-The datasets used for training are third-party and carry their own terms:
-[GoEmotions](https://github.com/google-research/google-research/tree/master/goemotions),
-[cirimus/super-emotion](https://huggingface.co/datasets/cirimus/super-emotion) and
-[Djacon/ru-izard-emotions](https://huggingface.co/datasets/Djacon/ru-izard-emotions).
-Neither the training corpus nor any client material is redistributed here; the
-dataset is rebuilt from source.
+The training set is rebuilt from one third-party corpus, which carries its own
+terms: [cirimus/super-emotion](https://huggingface.co/datasets/cirimus/super-emotion).
+It bundles six source corpora, and the 1,013 rows this build keeps from its
+GoEmotions portion additionally carry
+[GoEmotions](https://github.com/google-research/google-research/tree/master/goemotions)'
+terms. Neither the training corpus nor any client material is redistributed here;
+the dataset is rebuilt from source.
 
 ---
 

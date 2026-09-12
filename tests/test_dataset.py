@@ -9,6 +9,7 @@ recorded dataset and the separately recorded evaluation describe the same thing.
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 import pandas as pd
@@ -366,3 +367,44 @@ def test_progress_lines_name_every_step() -> None:
     lines = list(ds.iter_progress(record))
     assert len(lines) == len(record.steps)
     assert "-34,940" in "\n".join(lines)  # the Love rows
+
+
+# --- what the README says this was built from --------------------------------
+#
+# These two exist because the README got it wrong. Its licence section named
+# three datasets and its diagram then said "three public sets merged to 428,331
+# rows", when the build downloads one. tests/test_cli.py already pins what the
+# commands print; provenance is the other kind of claim a reader checks, and it
+# had drifted for exactly as long as nothing asserted it.
+
+
+def readme() -> str:
+    return (Path(__file__).resolve().parents[1] / "README.md").read_text(encoding="utf-8")
+
+
+def test_the_readme_names_only_the_corpus_the_build_reads() -> None:
+    """A second Hugging Face dataset in the README is how the old claim got in.
+
+    GoEmotions is linked as well, to its own repository rather than as a dataset,
+    and that is correct: it reaches this project only as one of the six corpora
+    inside super-emotion, and only the 1,013 rows that annotate disgust.
+    """
+    named = set(re.findall(r"huggingface\.co/datasets/([\w.-]+/[\w.-]+)", readme()))
+    assert named == {ds.SOURCE_DATASET}
+
+
+def test_the_readme_quotes_the_funnel_the_record_holds() -> None:
+    report = ds.DatasetReport.load()
+    text = readme()
+    assert f"{report.steps[0]['rows_in']:,}" in text
+    assert f"{report.published['rows']:,}" in text
+
+
+def test_the_readme_does_not_describe_the_build_as_a_merge_of_several_sets() -> None:
+    """The specific sentence that was wrong, kept out by name.
+
+    Guarding the phrasing rather than only the dataset list is deliberate: the
+    count and the wording drifted apart once already, with the licence section
+    naming three datasets and the diagram summarising them as three sets.
+    """
+    assert "three public sets" not in readme()
