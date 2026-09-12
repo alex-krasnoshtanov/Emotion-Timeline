@@ -16,6 +16,7 @@ if TYPE_CHECKING:  # pandas is imported inside the functions that need it
     import pandas as pd
 
 BENCHMARKS = Path(__file__).resolve().parents[2] / "benchmarks"
+RU_RECORD = BENCHMARKS / "russian" / "build-record.json"
 
 
 def parse_timestamp(text: str) -> float:
@@ -528,6 +529,90 @@ def cmd_training(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_build_russian(args: argparse.Namespace) -> int:
+    """Rebuild the Russian evaluation set and check the funnel against the record."""
+    from emotion_timeline.data import ru
+    from emotion_timeline.training import run
+
+    try:
+        frame, record, enthusiasm = ru.build(args.cache, args.drop_enthusiasm)
+    except ImportError:
+        print(
+            "building needs the source corpus: install with --extra data (uv sync --extra data)",
+            file=sys.stderr,
+        )
+        return 1
+
+    _, alternative, _ = ru.build(args.cache, not args.drop_enthusiasm)
+    moved = abs(record.rows - alternative.rows)
+
+    for line in ru.iter_progress(record):
+        print(line)
+    print()
+    print(f"{record.rows:,} rows")
+    for name, count in sorted(record.counts.items(), key=lambda kv: -kv[1]):
+        print(f"  {name:<9} {count:>6,}  {count / record.rows:6.1%}")
+
+    if args.write:
+        written = run.write_record(
+            ru.as_record(record, enthusiasm, moved, args.drop_enthusiasm), args.build_record
+        )
+        print()
+        print(f"wrote {written}")
+    else:
+        expected = ru.RussianReport.load(args.build_record)
+        differences = ru.compare(record, expected)
+        for difference in differences:
+            print(f"differs from the record: {difference}", file=sys.stderr)
+        if differences:
+            print("the build no longer reproduces the committed record", file=sys.stderr)
+            return 1
+        print()
+        print(f"matches {expected.source.name} exactly")
+
+    if args.out:
+        out = Path(args.out)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        frame.to_csv(out, index=False, encoding="utf-8")
+        print(f"wrote {out} ({out.stat().st_size / 1e6:.0f} MB)")
+    return 0
+
+
+def cmd_russian(args: argparse.Namespace) -> int:
+    """What the Russian evaluation set is, and what mapping it down cost."""
+    from emotion_timeline.data import ru
+
+    report = ru.RussianReport.load(args.build_record)
+    problems = ru.check_consistency(report)
+    for problem in problems:
+        print(f"inconsistent record: {problem}", file=sys.stderr)
+    if problems:
+        return 1
+
+    print(f"{report.rows:,} rows from {report.raw['source']}")
+    print()
+    for step in report.steps:
+        removed = step["rows_in"] - step["rows_out"]
+        change = f"{-removed:>8,}" if removed else " " * 8
+        print(f"  {step['name']:<16}{step['rows_out']:>8,} rows {change}  {step['note']}")
+    print()
+    for name, count in sorted(report.class_counts.items(), key=lambda kv: -kv[1]):
+        print(f"  {name:<9} {count:>6,}  {count / report.rows:6.1%}")
+
+    enthusiasm = report.enthusiasm
+    print()
+    if enthusiasm.get("mapped_to"):
+        print(
+            f"  enthusiasm is on {enthusiasm['rows']:,} rows and moves "
+            f"{enthusiasm['rows_moved']:,} of them to {enthusiasm['mapped_to']}; "
+            "the rest already carry a label the collapse prefers"
+        )
+    else:
+        print(f"  enthusiasm dropped, taking {enthusiasm['rows_moved']:,} rows with it")
+    print(f"  {', '.join(report.raw['dropped_columns'])} dropped: no seven-class equivalent")
+    return 0
+
+
 def cmd_model(args: argparse.Namespace) -> int:
     """What the two surviving records of the trained classifier can support."""
     from emotion_timeline.model.card import (
@@ -796,6 +881,35 @@ def build_parser() -> argparse.ArgumentParser:
         "--card-metrics", default=str(BENCHMARKS / "model" / "card-metrics.json")
     )
     training_parser.set_defaults(func=cmd_training)
+
+    build_russian_parser = sub.add_parser(
+        "build-russian",
+        help="rebuild the Russian evaluation set from the public corpus (needs --extra data)",
+        description=(
+            "Downloads Djacon/ru-izard-emotions and reruns the funnel, then checks "
+            "the result against the committed record. Small and quick -- about "
+            "25,000 rows."
+        ),
+    )
+    build_russian_parser.add_argument("--build-record", default=str(RU_RECORD))
+    build_russian_parser.add_argument("--out", help="write the rebuilt set here as CSV")
+    build_russian_parser.add_argument("--cache", help="dataset download cache directory")
+    build_russian_parser.add_argument(
+        "--drop-enthusiasm",
+        action="store_true",
+        help="drop the enthusiasm rows instead of merging them into Joy",
+    )
+    build_russian_parser.add_argument(
+        "--write", action="store_true", help="regenerate the record rather than check against it"
+    )
+    build_russian_parser.set_defaults(func=cmd_build_russian)
+
+    russian_parser = sub.add_parser(
+        "russian",
+        help="the Russian evaluation set, and what mapping it to seven classes cost",
+    )
+    russian_parser.add_argument("--build-record", default=str(RU_RECORD))
+    russian_parser.set_defaults(func=cmd_russian)
 
     errors_parser = sub.add_parser(
         "errors",

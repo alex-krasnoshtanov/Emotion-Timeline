@@ -1,0 +1,56 @@
+{
+  "_comment": [
+    "The Russian evaluation set, rebuilt from Djacon/ru-izard-emotions.",
+    "Written by `emotion-timeline build-russian`. The corpus is public and",
+    "ungated; this file is the funnel, so `emotion-timeline russian` can",
+    "report it without downloading anything. Register is translated social",
+    "media, which is not the documentary speech the pipeline runs on -- it",
+    "is the only Russian ground truth available, not a representative one."
+  ],
+  "source": "Djacon/ru-izard-emotions",
+  "enthusiasm": {
+    "rows": 5185,
+    "rows_moved": 1115,
+    "mapped_to": "Joy"
+  },
+  "dropped_columns": [
+    "guilt",
+    "shame"
+  ],
+  "rows": 24766,
+  "steps": [
+    {
+      "name": "load",
+      "rows_in": 24891,
+      "rows_out": 24891,
+      "note": "every split of Djacon/ru-izard-emotions"
+    },
+    {
+      "name": "deduplicate",
+      "rows_in": 24891,
+      "rows_out": 24853,
+      "note": "identical text, keeping the first"
+    },
+    {
+      "name": "drop-unlabelled",
+      "rows_in": 24853,
+      "rows_out": 24766,
+      "note": "no label left once guilt and shame go"
+    },
+    {
+      "name": "assign-labels",
+      "rows_in": 24766,
+      "rows_out": 24766,
+      "note": "collapse by priority; enthusiasm becomes Joy"
+    }
+  ],
+  "class_counts": {
+    "Anger": 2398,
+    "Disgust": 2714,
+    "Fear": 1898,
+    "Joy": 4582,
+    "Neutral": 7754,
+    "Sadness": 3789,
+    "Surprise": 1631
+  }
+}

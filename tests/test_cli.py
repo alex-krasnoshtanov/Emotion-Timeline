@@ -763,3 +763,94 @@ def test_training_refuses_records_that_contradict_each_other(
 
     assert cli.main(["training", "--summary", str(broken)]) == 1
     assert "inconsistent record" in capsys.readouterr().err
+
+
+# --- russian -----------------------------------------------------------------
+
+
+def test_russian_prints_the_funnel_and_the_mapping_cost(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    assert cli.main(["russian"]) == 0
+    out = capsys.readouterr().out
+    assert "24,766 rows" in out
+    assert "Neutral    7,754   31.3%" in out
+    assert "moves 1,115 of them to Joy" in out
+    assert "guilt, shame dropped" in out
+
+
+def test_russian_refuses_an_inconsistent_record(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from emotion_timeline.data import ru
+
+    raw = json.loads(Path(ru.DEFAULT_RECORD).read_text(encoding="utf-8"))
+    raw["rows"] = 2
+    broken = tmp_path / "broken.json"
+    broken.write_text(json.dumps(raw), encoding="utf-8")
+
+    assert cli.main(["russian", "--build-record", str(broken)]) == 1
+    assert "inconsistent record" in capsys.readouterr().err
+
+
+def test_build_russian_explains_the_missing_extra(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from emotion_timeline.data import ru
+
+    def no_datasets(*_: object, **__: object) -> None:
+        raise ImportError("no datasets")
+
+    monkeypatch.setattr(ru, "build", no_datasets)
+    assert cli.main(["build-russian"]) == 1
+    assert "--extra data" in capsys.readouterr().err
+
+
+def test_build_russian_checks_itself_against_the_record(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The whole command on eight fake rows, with no download."""
+    import pandas as pd
+
+    from emotion_timeline.data import ru
+
+    rows = [
+        ("plain joy", 0, 1, 0, 0, 0, 0, 0, 0, 0, 0),
+        ("enthusiasm only", 0, 0, 0, 0, 1, 0, 0, 0, 0, 0),
+        ("anger and disgust", 0, 0, 0, 1, 0, 0, 1, 0, 0, 0),
+        ("guilt only", 0, 0, 0, 0, 0, 0, 0, 0, 1, 0),
+    ]
+    frame = pd.DataFrame(rows, columns=["text", *ru.SOURCE_COLUMNS])
+    monkeypatch.setattr(ru, "load_source", lambda *a, **k: frame)
+
+    record = Path("x")
+    assert cli.main(["build-russian", "--build-record", str(record), "--write"]) == 0
+    try:
+        out = capsys.readouterr().out
+        assert "3 rows" in out
+        assert cli.main(["build-russian", "--build-record", str(record)]) == 0
+        assert "matches" in capsys.readouterr().out
+    finally:
+        record.unlink(missing_ok=True)
+
+
+def test_build_russian_reports_a_build_that_drifted(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    import pandas as pd
+
+    from emotion_timeline.data import ru
+
+    frame = pd.DataFrame(
+        [("only joy", 0, 1, 0, 0, 0, 0, 0, 0, 0, 0)], columns=["text", *ru.SOURCE_COLUMNS]
+    )
+    monkeypatch.setattr(ru, "load_source", lambda *a, **k: frame)
+    record = tmp_path / "record.json"
+    assert cli.main(["build-russian", "--build-record", str(record), "--write"]) == 0
+
+    other = pd.DataFrame(
+        [("only anger", 0, 0, 0, 1, 0, 0, 0, 0, 0, 0)], columns=["text", *ru.SOURCE_COLUMNS]
+    )
+    monkeypatch.setattr(ru, "load_source", lambda *a, **k: other)
+    assert cli.main(["build-russian", "--build-record", str(record)]) == 1
+    assert "no longer reproduces" in capsys.readouterr().err
