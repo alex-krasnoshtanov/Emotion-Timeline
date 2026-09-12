@@ -107,12 +107,14 @@ def all_figures() -> set[str]:
     from emotion_timeline.data import figures as ds_figures
     from emotion_timeline.model import figures as model_figures
     from emotion_timeline.selection import figures as sel_figures
+    from emotion_timeline.training import figures as training_figures
 
     return (
         set(ea.FIGURES)
         | set(ds_figures.FIGURES)
         | set(sel_figures.FIGURES)
         | set(model_figures.FIGURES)
+        | set(training_figures.FIGURES)
     )
 
 

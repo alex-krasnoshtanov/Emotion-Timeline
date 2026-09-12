@@ -49,6 +49,8 @@ inherited record cannot say about itself, because nothing recorded its epochs.
 
 ## Against the card, class by class
 
+![5 of 6 comparable classes beat the record they were trained to match](../assets/fine-tune-against-card.png)
+
 The card reports 0.8995 accuracy and 0.8127 macro F1 over its own 64,250 rows.
 
 | Class | Card | Here | |

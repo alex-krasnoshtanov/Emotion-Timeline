@@ -260,6 +260,8 @@ measures it against the card the section before takes apart.
 uv run emotion-timeline training      # reads only committed records
 ```
 
+![5 of 6 comparable classes beat the record they were trained to match](assets/fine-tune-against-card.png)
+
 DistilBERT on 293,426 rows, three epochs, 11.6 minutes on an RTX 5070. Over
 62,877 held-out rows: **accuracy 0.9164**, macro F1 0.8088, weighted F1 0.9164.
 The card reports 0.8995 and 0.8127 over its own 64,250.

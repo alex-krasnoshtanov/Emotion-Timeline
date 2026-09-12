@@ -269,3 +269,32 @@ def test_the_readme_quotes_the_same_numbers_as_the_chapter() -> None:
         if row.retrain_f1 is not None:
             assert f"{row.retrain_f1:.4f}" in readme
     assert "not comparable" in readme
+
+
+# --- the figure ---------------------------------------------------------------
+
+
+def test_the_figure_renders_and_is_stamped_with_both_records(tmp_path: Path) -> None:
+    from emotion_timeline.training import figures as training_figures
+
+    written = training_figures.render_all(committed(), tmp_path)
+    assert len(written) == len(training_figures.FIGURES)
+    from emotion_timeline import figures as shared
+
+    assert shared.read_stamp(written[0]) == committed().digest
+
+
+def test_the_committed_figure_is_current() -> None:
+    from emotion_timeline.training import figures as training_figures
+
+    root = Path(__file__).resolve().parents[1]
+    assert training_figures.check_figures_current(committed(), root / "assets") == []
+
+
+def test_changing_either_record_makes_the_figure_stale(tmp_path: Path) -> None:
+    from emotion_timeline.training import figures as training_figures
+
+    report = committed()
+    training_figures.render_all(report, tmp_path)
+    moved = training.TrainingReport(run=report.run, summary=report.summary, digest="0" * 64)
+    assert training_figures.check_figures_current(moved, tmp_path) != []
