@@ -362,9 +362,10 @@ round-tripped English → Russian → English, holding everything else fixed:
 | after `NLLB-600M` round trip | 0.5750 |
 
 **Translation costs this classifier a third of its accuracy**, and a translator six
-times the size recovers 0.0270 of the 0.3700 — seven per cent of the loss. The
-surface markers the model leans on survive intact, so that is not the mechanism
-either. A meaning-preserving rewrite destroys most of what 0.9164 was measuring,
+times the size recovers 0.0270 of the 0.3700 — seven per cent of the loss. On the
+Russian set the two engines are a single standard error apart, while the gap to
+the native model is nine and a half. The surface markers the model leans on
+survive intact, so that is not the mechanism either. A meaning-preserving rewrite destroys most of what 0.9164 was measuring,
 which says more about the classifier than about translation.
 
 > **An audit corrected this chapter.** It previously reported A at 0.3631 and

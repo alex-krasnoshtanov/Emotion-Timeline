@@ -121,8 +121,10 @@ different corpora and were never comparable.
 **And a much better translator barely helps.** NLLB-600M is roughly six times the
 size of the opus-mt pair and trained on 200 languages. It recovers **0.0270 of the
 0.3700** — about seven per cent of the loss. On the Russian set itself it does not
-help at all: A-NLLB scores 0.3612 against A's 0.3728. So the loss is not the
-translator's quality. It is the paraphrase.
+help either: A-NLLB scores 0.3612 against A's 0.3728, a difference of 43 rows and
+**about one standard error**, so the two translators are indistinguishable there.
+What is not indistinguishable is the gap to B, at nine and a half. So the loss is
+not the translator's quality. It is the paraphrase.
 
 The obvious explanation is ruled out too. `error-analysis.md` found this model
 leans on surface markers, and translation rewrites punctuation freely — but the

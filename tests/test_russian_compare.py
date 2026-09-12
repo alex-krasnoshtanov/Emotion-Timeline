@@ -399,14 +399,19 @@ def test_on_this_corpus_classifying_russian_directly_beats_translating_it() -> N
 
 
 def test_a_far_better_translator_does_not_close_the_gap() -> None:
-    """The control for "a better translator would have won". It would not have."""
+    """The control for "a better translator would have won". It would not have.
+
+    The two engines land 43 rows apart on 3,715 -- about one standard error, so
+    this asserts that they are *close*, not which is ahead. The gap to the native
+    model is nine and a half standard errors, and that is the one worth pinning.
+    """
     approaches = committed().approaches
     opus = float(approaches["A translate, then ours"]["accuracy"])
     nllb = float(approaches["A-NLLB translate, then ours"]["accuracy"])
+    native = float(approaches["B native ruBERT"]["accuracy"])
     assert nllb == pytest.approx(0.3612, abs=5e-4)
-    # Six times the parameters, and on this set it does not even match opus-mt.
-    assert nllb < opus
-    assert nllb < float(approaches["B native ruBERT"]["accuracy"]) - 0.1
+    assert abs(nllb - opus) < 0.03
+    assert native - max(nllb, opus) > 0.10
 
 
 def test_our_native_model_beats_the_one_the_pipeline_shipped() -> None:
