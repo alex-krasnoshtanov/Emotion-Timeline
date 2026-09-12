@@ -118,32 +118,28 @@ def test_paths_are_recorded_relative_to_the_repository() -> None:
 # --- aggregation --------------------------------------------------------------
 
 
-def test_a_scenes_probability_is_weighted_by_duration_not_by_segment_count() -> None:
-    """The long segment wins, which unweighted averaging would get backwards."""
+def test_a_scenes_probability_is_weighted_by_duration_not_by_chunk_count() -> None:
+    """The long chunk wins, which unweighted averaging would get backwards."""
     scene = pipeline.group(segments((0, 60), (60, 61), (61, 62)), gap=1.0)[0]
+    pieces = pipeline.chunks([scene], max_chars=6)
+    assert [round(piece.seconds) for piece in pieces] == [60, 1, 1]
     values = np.vstack([flat(1, "Sadness"), flat(2, "Joy")])
-    aggregated = pipeline.scene_probabilities([scene], values)
+    aggregated = pipeline.aggregate(pieces, values, 1)
     assert EMOTIONS[int(aggregated.argmax())] == "Sadness"
     assert EMOTIONS[int(values.mean(axis=0).argmax())] == "Joy"
 
 
 def test_a_scene_of_zero_length_segments_averages_rather_than_dividing_by_zero() -> None:
     scene = pipeline.group([pipeline.Segment(0, 0, "a"), pipeline.Segment(0, 0, "b")], gap=1.0)[0]
-    aggregated = pipeline.scene_probabilities(
-        [scene], np.vstack([flat(1, "Fear"), flat(1, "Fear")])
-    )
+    pieces = pipeline.chunks([scene], max_chars=1)
+    aggregated = pipeline.aggregate(pieces, np.vstack([flat(1, "Fear"), flat(1, "Fear")]), 1)
     assert EMOTIONS[int(aggregated.argmax())] == "Fear"
 
 
-def test_probabilities_that_do_not_cover_every_segment_are_refused() -> None:
-    scenes = pipeline.group(segments((0, 1), (1, 2)), gap=1.0)
-    with pytest.raises(ValueError, match="against 2 segments"):
-        pipeline.scene_probabilities(scenes, flat(1, "Joy"))
-
-
-def test_each_scene_keeps_its_own_segments() -> None:
+def test_each_scene_keeps_its_own_chunks() -> None:
     scenes = pipeline.group(segments((0, 1), (5, 6)), gap=1.0)
-    aggregated = pipeline.scene_probabilities(scenes, np.vstack([flat(1, "Anger"), flat(1, "Joy")]))
+    pieces = pipeline.chunks(scenes)
+    aggregated = pipeline.aggregate(pieces, np.vstack([flat(1, "Anger"), flat(1, "Joy")]), 2)
     assert [EMOTIONS[int(row.argmax())] for row in aggregated] == ["Anger", "Joy"]
 
 
@@ -152,8 +148,11 @@ def test_each_scene_keeps_its_own_segments() -> None:
 
 def built() -> dict[str, Any]:
     scenes = pipeline.group(segments((0, 5), (5.5, 8), (20, 25)), gap=1.0)
+    pieces = pipeline.chunks(scenes, max_chars=6)
+    assert [piece.scene for piece in pieces] == [0, 0, 1]
     return pipeline.build_record(
         scenes,
+        pieces,
         np.vstack([flat(2, "Joy"), flat(1, "Fear")]),
         np.vstack([flat(2, "Joy"), flat(1, "Anger")]),
         source="somewhere.csv",
@@ -208,7 +207,7 @@ def test_the_emotion_is_the_native_model_and_the_translation_is_the_second_opini
 def test_documentary_narration_comes_out_mostly_neutral() -> None:
     """The headline of the chapter, and the reason the confidence strip matters."""
     counts = committed().counts()
-    assert counts["Neutral"] == 32
+    assert counts["Neutral"] == 26
     assert sum(counts.values()) == 47
     assert set(counts) == set(EMOTIONS)
 
@@ -216,7 +215,7 @@ def test_documentary_narration_comes_out_mostly_neutral() -> None:
 def test_the_agreement_rate_carries_its_caveat() -> None:
     """It is a consistency signal. The record has to say so, beside the number."""
     agreement = committed().agreement
-    assert agreement["scenes"] == 23
+    assert agreement["scenes"] == 22
     assert "not an accuracy" in agreement["caveat"]
     assert "ru-izard" in agreement["measured_on"]
 
@@ -329,7 +328,7 @@ def test_describe_names_the_two_models_and_the_agreement() -> None:
     out = "\n".join(pipeline.describe(committed()))
     assert "47 scenes" in out and "1s silence gap" in out
     assert "ruBERT" in out and "translate" in out
-    assert "agree on 23 of 47" in out
+    assert "agree on 22 of 47" in out
     assert "not an accuracy" in out
 
 
@@ -339,8 +338,8 @@ def test_describe_names_the_two_models_and_the_agreement() -> None:
 def test_the_second_opinion_leans_disgust() -> None:
     """A says Disgust sixteen times where B says it three. The chapter says so."""
     scenes = committed().scenes
-    assert sum(1 for scene in scenes if scene["second_opinion"] == "Disgust") == 16
-    assert sum(1 for scene in scenes if scene["emotion"] == "Disgust") == 3
+    assert sum(1 for scene in scenes if scene["second_opinion"] == "Disgust") == 17
+    assert sum(1 for scene in scenes if scene["emotion"] == "Disgust") == 4
 
 
 def test_agreement_and_confidence_move_together() -> None:
@@ -348,28 +347,26 @@ def test_agreement_and_confidence_move_together() -> None:
     scenes = committed().scenes
     agreed = [float(s["confidence"]) for s in scenes if s["agreed"]]
     split = [float(s["confidence"]) for s in scenes if not s["agreed"]]
-    assert round(sum(agreed) / len(agreed), 3) == 0.456
-    assert round(sum(split) / len(split), 3) == 0.388
+    assert round(sum(agreed) / len(agreed), 3) == 0.422
+    assert round(sum(split) / len(split), 3) == 0.377
 
 
 def test_the_confidences_are_low_and_the_chapter_admits_it() -> None:
     values = sorted(float(scene["confidence"]) for scene in committed().scenes)
     median = values[len(values) // 2]
-    assert round(median, 3) == 0.414
-    assert "0.414" in (ROOT / "docs" / "pipeline.md").read_text(encoding="utf-8")
+    assert round(median, 3) == 0.382
+    assert "0.382" in (ROOT / "docs" / "pipeline.md").read_text(encoding="utf-8")
 
 
-def test_the_loudest_scene_is_followed_by_its_opposite_and_both_are_agreed() -> None:
-    """The claim the chapter closes its results on, asserted rather than admired."""
-    scenes = {int(scene["scene"]): scene for scene in committed().scenes}
-    joy, fear = scenes[44], scenes[45]
-    assert (joy["emotion"], fear["emotion"]) == ("Joy", "Fear")
-    assert joy["agreed"] and fear["agreed"]
-    loudest = max(
-        (s for s in committed().scenes if s["emotion"] != "Neutral"),
-        key=lambda s: float(s["confidence"]),
-    )
-    assert int(loudest["scene"]) == 44
+def test_the_loudest_scene_is_agreed_and_so_are_the_three_quietest() -> None:
+    """The claim the chapter closes its results on: agreement is not confidence."""
+    speaking = [s for s in committed().scenes if s["emotion"] != "Neutral"]
+    ranked = sorted(speaking, key=lambda s: float(s["confidence"]))
+    loudest = ranked[-1]
+    assert (loudest["emotion"], float(loudest["confidence"])) == ("Joy", 0.7691)
+    assert loudest["agreed"]
+    assert [float(s["confidence"]) for s in ranked[:3]] == [0.2297, 0.2370, 0.2458]
+    assert all(s["agreed"] for s in ranked[:3])
 
 
 def test_the_readme_quotes_the_record_it_was_built_from() -> None:
@@ -386,6 +383,104 @@ def test_the_chapter_ends_by_saying_what_it_does_not_establish() -> None:
     chapter = (ROOT / "docs" / "pipeline.md").read_text(encoding="utf-8")
     assert "## What this does not establish" in chapter
     assert "There are no labels on this recording" in chapter
+
+
+# --- chunking -----------------------------------------------------------------
+
+
+def test_chunks_pack_whole_segments_up_to_the_budget() -> None:
+    scene = pipeline.group(segments((0, 5), (5, 10), (10, 15)), gap=1.0)[0]
+    pieces = pipeline.chunks([scene], max_chars=14)
+    assert [piece.text for piece in pieces] == ["line 0 line 1", "line 2"]
+    assert [piece.seconds for piece in pieces] == [10.0, 5.0]
+
+
+def test_chunks_never_run_across_a_scene_boundary() -> None:
+    scenes = pipeline.group(segments((0, 1), (9, 10)), gap=1.0)
+    assert [piece.scene for piece in pipeline.chunks(scenes, max_chars=400)] == [0, 1]
+
+
+def test_a_segment_too_long_to_read_is_split_between_sentences() -> None:
+    """The residual transcriber dependency: a 974-character paragraph."""
+    long = pipeline.Segment(0, 10, "Aaa bbb ccc. Ddd eee fff. Ggg hhh iii.")
+    pieces = pipeline.chunks([pipeline.Scene(0, (long,))], max_chars=26)
+    assert [piece.text for piece in pieces] == ["Aaa bbb ccc. Ddd eee fff.", "Ggg hhh iii."]
+    # Time is apportioned by characters and still adds up to the segment's.
+    assert round(sum(piece.seconds for piece in pieces), 6) == 10.0
+
+
+def test_a_sentence_longer_than_the_budget_is_cut_rather_than_dropped() -> None:
+    assert pipeline.sentences("x" * 25, max_chars=10) == ["x" * 10, "x" * 10, "x" * 5]
+
+
+def test_no_chunk_of_either_committed_transcript_exceeds_the_budget() -> None:
+    """The claim the 400 was chosen for: neither model ever truncates."""
+    for path, gap in (
+        (pipeline.DEFAULT_SEGMENTS, 1.0),
+        (ROOT / "benchmarks" / "pipeline" / "whisper-turbo.csv", 2.0),
+    ):
+        pieces = pipeline.chunks(pipeline.group(pipeline.read_segments(path), gap))
+        assert pieces
+        assert max(len(piece.text) for piece in pieces) <= pipeline.CHUNK_CHARS
+
+
+def test_the_committed_record_says_what_unit_it_classified() -> None:
+    assert committed().raw["chunks"] == 142
+    assert committed().raw["chunk_chars"] == 400
+
+
+def test_aggregating_probabilities_that_do_not_cover_every_chunk_is_refused() -> None:
+    scenes = pipeline.group(segments((0, 1), (5, 6)), gap=1.0)
+    pieces = pipeline.chunks(scenes)
+    with pytest.raises(ValueError, match="against 2 chunks"):
+        pipeline.aggregate(pieces, flat(1, "Joy"), len(scenes))
+
+
+# --- how much of a timeline is the transcriber --------------------------------
+
+
+def whisper() -> pipeline.Timeline:
+    return pipeline.Timeline.load(ROOT / "benchmarks" / "pipeline" / "timeline-whisper.json")
+
+
+def test_the_second_transcript_is_the_same_recording() -> None:
+    other = whisper()
+    assert other.raw["segments"] == 947
+    assert other.raw["scenes"] == 54
+    assert round(other.duration / 60) == 52
+    assert (
+        pipeline.check_consistency(
+            other, pipeline.read_segments(ROOT / "benchmarks" / "pipeline" / "whisper-turbo.csv")
+        )
+        == []
+    )
+
+
+def test_changing_the_transcriber_moves_more_than_a_third_of_the_timeline() -> None:
+    """The finding, and the ceiling on every other claim in the chapter."""
+    overlap = pipeline.runtime_agreement(committed(), whisper())
+    assert overlap["covered"] == 2740
+    assert overlap["share"] == 0.6197
+    assert next(iter(overlap["disagreements"])) == "Neutral -> Fear"
+
+
+def test_runtime_agreement_reports_the_coverage_it_measured_over() -> None:
+    """A share over the seconds two timelines happen to share means nothing alone."""
+    overlap = pipeline.runtime_agreement(committed(), whisper())
+    assert 0.0 < overlap["coverage"] < 1.0
+    assert overlap["covered"] < overlap["grid_points"]
+
+
+def test_a_timeline_agrees_with_itself_everywhere() -> None:
+    overlap = pipeline.runtime_agreement(committed(), committed())
+    assert overlap["share"] == 1.0
+    assert overlap["disagreements"] == {}
+
+
+def test_a_moment_in_no_scene_has_no_emotion() -> None:
+    """Silence longer than the threshold belongs to nobody, and is not guessed at."""
+    assert pipeline.emotion_at(committed(), 0.0) is None
+    assert pipeline.emotion_at(committed(), 3.0) == "Neutral"
 
 
 # --- the optional front end ---------------------------------------------------

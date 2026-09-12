@@ -3,13 +3,13 @@
 **Turning a Russian-language video into a per-scene emotion timeline** — and the
 dataset, model selection and error analysis that had to happen first.
 
-![47 scenes over 52 minutes; the two models agree on 49% of them](assets/emotion-timeline.png)
+![47 scenes over 52 minutes; the two models agree on 47% of them](assets/emotion-timeline.png)
 
 A real 51-minute Russian documentary, 316 transcript segments grouped into 47
-scenes, each scored by two models trained on different languages. The band is
-solid where the two agree and hatched where they split, because with no labels on
-a documentary that is the only honest thing a timeline can tell you about which
-parts of itself to believe.
+scenes, each read by two models trained on different languages. The band is solid
+where the two agree and hatched where they split, because with no labels on a
+documentary that is the only honest thing a timeline can say about which parts of
+itself to believe.
 
 [![CI](https://github.com/alex-krasnoshtanov/Emotion-Timeline/actions/workflows/ci.yml/badge.svg)](https://github.com/alex-krasnoshtanov/Emotion-Timeline/actions/workflows/ci.yml)
 [![Python 3.12 | 3.13](https://img.shields.io/badge/python-3.12%20%7C%203.13-blue.svg)](https://www.python.org/downloads/)
@@ -365,12 +365,11 @@ Full chapter: [`docs/russian.md`](docs/russian.md).
 ## Result: the pipeline, on a real recording
 
 Three columns — `start_s`, `end_s`, text — are the whole interface. Above them,
-optional: yt-dlp, ffmpeg, Whisper. Below them, reproducible with no network at
-all, because the transcript is already committed for the speech-to-text chapter.
+optional: yt-dlp, ffmpeg, Whisper large-v3-turbo. Below them, reproducible with
+no network at all.
 
 ```bash
-uv run emotion-timeline timeline        # reads only committed records
-uv run emotion-timeline transcribe URL  # the optional front end, --extra stt
+uv run emotion-timeline timeline --against benchmarks/pipeline/timeline-whisper.json
 ```
 
 | | |
@@ -378,32 +377,39 @@ uv run emotion-timeline transcribe URL  # the optional front end, --extra stt
 | Segments | 316 |
 | Scenes, at a 1s silence gap | 47 |
 | Recording | 51.6 minutes |
-| Scenes the two models agree on | 23 (48.9%) |
-| Median calibrated confidence | 0.414 |
+| Scenes the two models agree on | 22 (46.8%) |
+| Median calibrated confidence | 0.382 |
 
 **One model answers; the other is asked anyway.** No combination rule beat the
-native Russian model alone, so the timeline does not use one — the emotion is
-B's. The translation path still runs and its answer rides along, because the
-*agreement* between them was worth 0.5604 against 0.4816. That is a where-to-look
-signal rather than a better classifier, and it is drawn as one.
+native Russian model alone, so the timeline does not use one. The translation path
+still runs and its answer rides along, because the *agreement* between them was
+worth 0.5604 against 0.4816 — a where-to-look signal rather than a better
+classifier, and drawn as one.
 
-**Two-thirds of a documentary is Neutral, which is the correct answer.** 32 of 47
-scenes are narration. The 15 that are not land where the episode turns: Fear at
-5.4 minutes when the investigator says the dead man was a known criminal, Joy at
-34.7 when the presenter crosses into Colombia, and at 49.5 the most confident
-non-Neutral scene in the episode — *"thank you for the courage"* — followed
-immediately at 49.9 by its opposite, *"such anxious feelings stay with you
-afterwards"*. Both models agree on both.
+**Just over half a documentary is Neutral, which is the correct answer.** The 21
+scenes that are not land where the episode turns: Disgust walking away from a
+murder scene at 6.1 minutes, Fear at 16.4 on *"I understood why they will not talk
+about it"*, and the episode's most confident non-Neutral reading at 49.5 —
+*"thank you for the interview, for the courage, for the candour"*, 0.7691, both
+models agreeing.
 
-**Three components became one parameter each.** PySceneDetect became a silence
-threshold, the separate intensity classifier became the calibration temperature
-already fitted in stage 6, and an unpinnable HTTP call to a local LLM became a
-300 MB translation model with greedy decoding.
+**Then the same recording was run through a second transcriber, and 38% of the
+timeline moved.** Whisper large-v3-turbo instead of AssemblyAI: same models, same
+thresholds, and the same emotion on only **62.0%** of the 2,740 seconds both
+cover. That number needed no labels, no accuracy figure would have shown it, and
+it is the ceiling on how precisely anything here can be claimed. Both transcripts
+and both timelines are committed so it recomputes.
+
+It also found a real defect first time round. Classifying whatever rows the
+transcriber emitted made the Whisper run **87% Neutral against AssemblyAI's 68%**,
+because Whisper splits on pauses where AssemblyAI merges into paragraphs. The unit
+is now a fixed 400-character chunk — sized so neither model truncates — which is
+one reason for the gap removed, not the gap.
 
 **None of this is an accuracy.** The recording has no labels and never will have.
-48.9% is a consistency figure between two models whose errors correlate, and the
-median confidence of 0.414 says the classifier is rarely sure on documentary
-speech — which is the honest reading, not a footnote.
+46.8% is consistency between two models, 62.0% consistency between two
+transcripts, and the median confidence of 0.382 says the classifier is rarely sure
+on documentary speech.
 
 Full chapter: [`docs/pipeline.md`](docs/pipeline.md).
 
@@ -537,7 +543,7 @@ benchmarks/model-selection/  both surviving records of the nine-family benchmark
 benchmarks/model/        both surviving records of the trained classifier
 benchmarks/training/     the split manifest, the run, the held-out summary
 benchmarks/russian/      the Russian build, its split, and the four-way comparison
-benchmarks/pipeline/     the timeline over the committed transcript
+benchmarks/pipeline/     two transcripts of one recording, and a timeline over each
 src/emotion_timeline/
   stt/                   the word error rate harness
   analysis/              error analysis over model predictions

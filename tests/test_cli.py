@@ -109,9 +109,32 @@ def test_timeline_prints_the_scene_breakdown_and_the_agreement(
     assert "316 segments over 51.6 minutes" in out
     assert "47 scenes at a 1s silence gap" in out
     # The headline of the chapter: a documentary narration is mostly Neutral.
-    assert "Neutral   32  68.1%" in out
-    assert "agree on 23 of 47 scenes (48.9%)" in out
+    assert "Neutral   26  55.3%" in out
+    assert "agree on 22 of 47 scenes (46.8%)" in out
     assert "not an accuracy" in out
+
+
+def test_timeline_reports_how_much_a_second_transcriber_moves_it(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The chapter's ceiling, printed by the command that publishes it."""
+    assert (
+        cli.main(
+            [
+                "timeline",
+                "--out",
+                str(tmp_path / "t.csv"),
+                "--assets",
+                str(tmp_path),
+                "--against",
+                str(ROOT / "benchmarks" / "pipeline" / "timeline-whisper.json"),
+            ]
+        )
+        == 0
+    )
+    out = capsys.readouterr().out
+    assert "the same emotion on 62.0% of the 2,740 seconds both cover" in out
+    assert "Neutral -> Fear" in out
 
 
 def test_timeline_writes_the_table_and_the_picture(tmp_path: Path) -> None:

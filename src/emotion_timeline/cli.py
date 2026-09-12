@@ -22,6 +22,7 @@ SEGMENTS = BENCHMARKS / "stt" / "assemblyai-best.csv"
 
 #: Re-exported so `--help` shows the default the module documents.
 GAP_SECONDS = 1.0
+CHUNK_CHARS = 400
 TURBO = "large-v3-turbo"
 
 
@@ -786,8 +787,12 @@ def cmd_score_timeline(args: argparse.Namespace) -> int:  # pragma: no cover - r
 
     segments = pipeline.read_segments(args.segments)
     scenes = pipeline.group(segments, args.gap)
-    texts = [segment.text for segment in segments]
-    print(f"{len(segments):,} segments -> {len(scenes)} scenes at a {args.gap:g}s gap")
+    pieces = pipeline.chunks(scenes, args.chunk_chars)
+    texts = [piece.text for piece in pieces]
+    print(
+        f"{len(segments):,} segments -> {len(scenes)} scenes at a {args.gap:g}s gap "
+        f"-> {len(pieces)} chunks of at most {args.chunk_chars} characters"
+    )
 
     comparison = json.loads(Path(args.comparison).read_text(encoding="utf-8"))
     blocks = comparison["approaches"]
@@ -810,6 +815,7 @@ def cmd_score_timeline(args: argparse.Namespace) -> int:  # pragma: no cover - r
 
     record = pipeline.build_record(
         scenes,
+        pieces,
         calibrate(b_raw, blocks[b_name]),
         calibrate(a_raw, blocks[a_name]),
         source=pipeline.relative(args.segments),
@@ -861,6 +867,17 @@ def cmd_timeline(args: argparse.Namespace) -> int:
 
     for line in pipeline.describe(report):
         print(line)
+
+    if args.against:
+        other = pipeline.Timeline.load(args.against)
+        overlap = pipeline.runtime_agreement(report, other)
+        print()
+        print(
+            f"  against {other.raw['source']}: the same emotion on "
+            f"{float(overlap['share']):.1%} of the {overlap['covered']:,} seconds both cover"
+        )
+        for move, count in list(overlap["disagreements"].items())[:5]:
+            print(f"    {move:<24} {count:>5}s")
 
     written = pipeline.write_csv(pipeline.table(report, segments), args.out)
     drawn = pipeline_figures.render_all(report, args.assets)
@@ -1238,6 +1255,12 @@ def build_parser() -> argparse.ArgumentParser:
         default=GAP_SECONDS,
         help="silence longer than this starts a new scene (seconds)",
     )
+    score_timeline_parser.add_argument(
+        "--chunk-chars",
+        type=int,
+        default=CHUNK_CHARS,
+        help="the classification unit; keeps the timeline independent of the transcriber",
+    )
     score_timeline_parser.add_argument("--weights", default="models/distilbert-v1")
     score_timeline_parser.add_argument("--rubert", default="models/rubert-v1")
     score_timeline_parser.add_argument(
@@ -1259,6 +1282,10 @@ def build_parser() -> argparse.ArgumentParser:
     timeline_parser.add_argument("--segments", default=str(SEGMENTS))
     timeline_parser.add_argument("--out", default=str(BENCHMARKS / "pipeline" / "timeline.csv"))
     timeline_parser.add_argument("--assets", default="assets", help="where the figure goes")
+    timeline_parser.add_argument(
+        "--against",
+        help="another timeline record; reports how much runtime the two put the same emotion on",
+    )
     timeline_parser.set_defaults(func=cmd_timeline)
 
     errors_parser = sub.add_parser(
