@@ -116,6 +116,26 @@ against **0.388** where they split. Two signals that were never fitted to each
 other point the same way, which is mild corroboration that agreement is tracking
 something. It is not evidence that either is right.
 
+## Running it on a video of your own
+
+```bash
+uv sync --extra stt --extra model
+uv run emotion-timeline transcribe "<url or file>" --out data/segments.csv
+uv run emotion-timeline score-timeline --segments data/segments.csv --out mine.json
+uv run emotion-timeline timeline --record mine.json --segments data/segments.csv
+```
+
+`transcribe` is the only command in this repository that needs a network, and the
+only one carrying `# pragma: no cover`. It downloads audio with yt-dlp, converts
+it to 16 kHz mono with ffmpeg, runs Whisper large-v3-turbo and writes the three
+columns. Nothing it produces is committed: `downloads/` and `data/` are both
+gitignored, because the upstream repository carries about 700 MB of YouTube audio
+and that is the mistake not to repeat.
+
+`--language ru` is passed rather than detected. Auto-detection reads the first
+thirty seconds, so a recording that opens on music or a title card can come back
+as the wrong language and transcribe into it without complaining.
+
 ## What this does not establish
 
 - **Not an accuracy.** There are no labels on this recording. The 48.9%

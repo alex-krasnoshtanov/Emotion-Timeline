@@ -22,6 +22,7 @@ SEGMENTS = BENCHMARKS / "stt" / "assemblyai-best.csv"
 
 #: Re-exported so `--help` shows the default the module documents.
 GAP_SECONDS = 1.0
+TURBO = "large-v3-turbo"
 
 
 def parse_timestamp(text: str) -> float:
@@ -758,6 +759,21 @@ def cmd_compare_russian(args: argparse.Namespace) -> int:  # pragma: no cover - 
     return 0
 
 
+def cmd_transcribe(args: argparse.Namespace) -> int:  # pragma: no cover - needs network
+    """A video or an audio file, turned into the three columns `timeline` reads."""
+    from emotion_timeline.pipeline import transcribe
+
+    audio = transcribe.fetch_audio(args.source, args.downloads)
+    print(f"audio: {audio}")
+    segments = transcribe.transcribe(audio, args.model, args.language, progress=print)
+    written = transcribe.write_segments(segments, args.out)
+    minutes = segments[-1].end_s / 60 if segments else 0.0
+    print(f"{len(segments):,} segments over {minutes:.1f} minutes")
+    print(f"wrote {written}")
+    print(f"next: emotion-timeline score-timeline --segments {written}")
+    return 0
+
+
 def cmd_score_timeline(args: argparse.Namespace) -> int:  # pragma: no cover - runs two models
     """Score every segment with both models and write the timeline record."""
     import json
@@ -1184,6 +1200,26 @@ def build_parser() -> argparse.ArgumentParser:
         "--out", default=str(BENCHMARKS / "russian" / "comparison.json")
     )
     compare_russian_parser.set_defaults(func=cmd_compare_russian)
+
+    transcribe_parser = sub.add_parser(
+        "transcribe",
+        help="a video URL or an audio file into a segment CSV (needs --extra stt)",
+        description=(
+            "Downloads audio if given a URL, converts it to 16 kHz mono, runs "
+            "Whisper large-v3-turbo, and writes start_s, end_s and text. That "
+            "CSV is the only interface the rest of the pipeline has to this."
+        ),
+    )
+    transcribe_parser.add_argument("source", help="a video URL, or a local audio or video file")
+    transcribe_parser.add_argument("--out", default="data/segments.csv")
+    transcribe_parser.add_argument(
+        "--downloads", default="downloads", help="where audio is cached; gitignored"
+    )
+    transcribe_parser.add_argument("--model", default=TURBO)
+    transcribe_parser.add_argument(
+        "--language", default="ru", help="passed rather than detected; see the module docstring"
+    )
+    transcribe_parser.set_defaults(func=cmd_transcribe)
 
     score_timeline_parser = sub.add_parser(
         "score-timeline",

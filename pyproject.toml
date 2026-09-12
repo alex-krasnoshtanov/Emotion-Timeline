@@ -40,6 +40,13 @@ dev = [
 data = [
     "datasets>=3.0",
 ]
+# Only `transcribe` needs this, and nothing in CI does: it downloads audio and
+# runs Whisper. The seam below it -- a CSV of start_s, end_s and text -- is
+# already committed, so every published number here is reachable without it.
+stt = [
+    "yt-dlp>=2024.8",
+    "faster-whisper>=1.0",
+]
 # torch>=2.7 rather than >=2.4 because that is where sm_120 kernels first ship,
 # and this is trained on a Blackwell card. See [tool.uv.sources] below: the
 # version alone is not enough, the wheel has to come from the CUDA 12.8 index.
@@ -142,9 +149,11 @@ pretty = true
 module = [
     "accelerate.*",
     "datasets.*",
+    "faster_whisper.*",
     "scipy.*",
     "sklearn.*",
     "torch.*",
     "transformers.*",
+    "yt_dlp.*",
 ]
 ignore_missing_imports = true

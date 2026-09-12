@@ -370,6 +370,7 @@ all, because the transcript is already committed for the speech-to-text chapter.
 
 ```bash
 uv run emotion-timeline timeline        # reads only committed records
+uv run emotion-timeline transcribe URL  # the optional front end, --extra stt
 ```
 
 | | |
@@ -490,7 +491,8 @@ The core install is deliberately light — numpy, pandas, matplotlib, scipy. Not
 that needs a GPU or a paid API key is a required dependency, so reading the
 results costs a few seconds rather than a torch download. The heavier pieces are
 extras: `--extra data` to rebuild the training set from source, `--extra model`
-to fine-tune or run the classifier.
+to fine-tune or run the classifier, `--extra stt` to transcribe a video of your
+own.
 
 pip works too: `pip install -e ".[dev]"`.
 

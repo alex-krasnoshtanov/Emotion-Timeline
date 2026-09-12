@@ -130,5 +130,14 @@ def test_no_committed_command_requires_a_credential(monkeypatch: pytest.MonkeyPa
     for variable in creds.KNOWN:
         monkeypatch.delenv(variable, raising=False)
 
-    for command in (["dataset"], ["errors"], ["models"], ["model"], ["wer"]):
+    for command in (
+        ["dataset"],
+        ["errors"],
+        ["models"],
+        ["model"],
+        ["wer"],
+        ["russian"],
+        ["training"],
+        ["timeline"],
+    ):
         assert cli.main(command) == 0, command

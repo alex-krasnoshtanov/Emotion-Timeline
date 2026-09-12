@@ -388,6 +388,29 @@ def test_the_chapter_ends_by_saying_what_it_does_not_establish() -> None:
     assert "There are no labels on this recording" in chapter
 
 
+# --- the optional front end ---------------------------------------------------
+
+
+def test_a_transcription_round_trips_through_the_three_columns(tmp_path: Path) -> None:
+    """The seam: whatever writes these three columns can feed the timeline."""
+    from emotion_timeline.pipeline import transcribe
+
+    original = [
+        pipeline.Segment(0.0, 1.25, "первый"),
+        pipeline.Segment(3.5, 9.0, "second, with a comma"),
+    ]
+    written = transcribe.write_segments(original, tmp_path / "segments.csv")
+    assert bytes([13]) not in written.read_bytes()  # LF, not CRLF
+    assert pipeline.read_segments(written) == original
+
+
+def test_the_transcriber_is_turbo_and_says_why() -> None:
+    from emotion_timeline.pipeline import transcribe
+
+    assert transcribe.MODEL == "large-v3-turbo"
+    assert "7.75%" in (transcribe.__doc__ or "")
+
+
 # --- the figure ---------------------------------------------------------------
 
 
