@@ -186,6 +186,32 @@ from logits that still exist, so the 9 KB of records under
 `benchmarks/training/` can be re-derived rather than only checked for internal
 consistency.
 
+## 0.9164 is on text in exactly the form it was trained on
+
+The Russian chapter needed to know what translation costs, and answering that
+produced the sharpest limit on this number that anything here has found.
+
+Take these same held-out rows — 3,000 of them — and push them through English →
+Russian → English with an ordinary machine translator. The meaning survives; the
+wording does not.
+
+| | Accuracy | Macro F1 |
+| --- | ---: | ---: |
+| The rows as they are | **0.9180** | 0.8009 |
+| after an `opus-mt` round trip | 0.5480 | 0.4399 |
+| after an `NLLB-600M` round trip | 0.5750 | 0.4470 |
+
+**A meaning-preserving paraphrase costs a third of the accuracy.** A translator
+six times larger recovers 0.0270 of the 0.3700, so it is not a matter of
+translation quality, and the surface markers above survive the round trip almost
+unchanged, so it is not those either. Whatever carries the remaining signal is
+tied tightly to the exact wording of the training distribution.
+
+That does not make 0.9164 wrong. It makes it narrow: it is the accuracy on text
+written the way the training set was written, and it should not be read as what
+this classifier knows about emotion. `emotion-timeline translation-cost`
+recomputes it; [`russian.md`](russian.md) has the rest.
+
 ## What this does not establish
 
 - **That this model is better than the one the card describes.** It is better on
@@ -206,3 +232,7 @@ consistency.
 - **Anything about Russian.** The training data is English throughout. What the
   pipeline does with a Russian transcript is a separate question and not one this
   evaluation touches.
+- **That the round trip isolates *paraphrase* specifically.** It holds domain,
+  labels, annotator and model fixed, which is what it was built to do. It cannot
+  say which part of the rewrite — word choice, syntax, register — the model was
+  depending on, only that something wording-shaped carried a third of the score.

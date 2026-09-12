@@ -1,9 +1,13 @@
 {
   "_comment": [
     "A per-scene emotion timeline over a real 51-minute documentary,",
-    "The same recording as timeline.json, transcribed here by Whisper",
-    "large-v3-turbo instead of AssemblyAI. It exists to answer one question:",
-    "how much of a timeline is the transcriber? See docs/pipeline.md."
+    "written by `emotion-timeline score-timeline`. The emotion is the",
+    "native Russian model's: no combination rule beat it alone. The",
+    "translation path's answer rides along as a second opinion, because",
+    "where the two agreed accuracy was higher -- which makes disagreement",
+    "a place to look rather than a number to average away.",
+    "Scene text is not repeated here; it is in the transcript named by",
+    "`source`, and `check_consistency` requires the two to line up."
   ],
   "source": "benchmarks/pipeline/whisper-turbo.csv",
   "gap_seconds": 2.0,
@@ -21,13 +25,13 @@
   "second_opinion": {
     "name": "A translate, then ours",
     "model": "Helsinki-NLP/opus-mt-ru-en + models/distilbert-v1",
-    "temperature": 2.6193,
-    "held_out_accuracy": 0.3631
+    "temperature": 2.5908,
+    "held_out_accuracy": 0.3728
   },
   "agreement": {
-    "scenes": 23,
-    "share": 0.4259,
-    "held_out_accuracy_where_they_agreed": 0.5604,
+    "scenes": 18,
+    "share": 0.3333,
+    "held_out_accuracy_where_they_agreed": 0.5718,
     "measured_on": "the held-out ru-izard split, which is social-media register",
     "caveat": "agreement here is a consistency signal, not an accuracy: this recording has no labels, and two models can agree and both be wrong"
   },
@@ -39,9 +43,9 @@
       "segments": 1,
       "emotion": "Disgust",
       "confidence": 0.3047,
-      "second_opinion": "Disgust",
-      "second_confidence": 0.2689,
-      "agreed": true
+      "second_opinion": "Neutral",
+      "second_confidence": 0.3566,
+      "agreed": false
     },
     {
       "scene": 1,
@@ -51,7 +55,7 @@
       "emotion": "Neutral",
       "confidence": 0.4251,
       "second_opinion": "Neutral",
-      "second_confidence": 0.3693,
+      "second_confidence": 0.4392,
       "agreed": true
     },
     {
@@ -62,7 +66,7 @@
       "emotion": "Sadness",
       "confidence": 0.7188,
       "second_opinion": "Neutral",
-      "second_confidence": 0.2605,
+      "second_confidence": 0.2665,
       "agreed": false
     },
     {
@@ -73,7 +77,7 @@
       "emotion": "Disgust",
       "confidence": 0.4217,
       "second_opinion": "Disgust",
-      "second_confidence": 0.4429,
+      "second_confidence": 0.5721,
       "agreed": true
     },
     {
@@ -84,7 +88,7 @@
       "emotion": "Fear",
       "confidence": 0.333,
       "second_opinion": "Disgust",
-      "second_confidence": 0.242,
+      "second_confidence": 0.302,
       "agreed": false
     },
     {
@@ -95,7 +99,7 @@
       "emotion": "Disgust",
       "confidence": 0.4135,
       "second_opinion": "Neutral",
-      "second_confidence": 0.283,
+      "second_confidence": 0.2847,
       "agreed": false
     },
     {
@@ -106,7 +110,7 @@
       "emotion": "Disgust",
       "confidence": 0.296,
       "second_opinion": "Disgust",
-      "second_confidence": 0.4325,
+      "second_confidence": 0.4651,
       "agreed": true
     },
     {
@@ -116,9 +120,9 @@
       "segments": 31,
       "emotion": "Neutral",
       "confidence": 0.3361,
-      "second_opinion": "Neutral",
-      "second_confidence": 0.2417,
-      "agreed": true
+      "second_opinion": "Disgust",
+      "second_confidence": 0.2368,
+      "agreed": false
     },
     {
       "scene": 8,
@@ -127,8 +131,8 @@
       "segments": 55,
       "emotion": "Anger",
       "confidence": 0.2365,
-      "second_opinion": "Neutral",
-      "second_confidence": 0.2181,
+      "second_opinion": "Disgust",
+      "second_confidence": 0.209,
       "agreed": false
     },
     {
@@ -139,7 +143,7 @@
       "emotion": "Neutral",
       "confidence": 0.2791,
       "second_opinion": "Disgust",
-      "second_confidence": 0.2551,
+      "second_confidence": 0.3138,
       "agreed": false
     },
     {
@@ -150,7 +154,7 @@
       "emotion": "Sadness",
       "confidence": 0.2938,
       "second_opinion": "Neutral",
-      "second_confidence": 0.273,
+      "second_confidence": 0.2165,
       "agreed": false
     },
     {
@@ -161,7 +165,7 @@
       "emotion": "Neutral",
       "confidence": 0.3269,
       "second_opinion": "Disgust",
-      "second_confidence": 0.4045,
+      "second_confidence": 0.3928,
       "agreed": false
     },
     {
@@ -172,7 +176,7 @@
       "emotion": "Neutral",
       "confidence": 0.5054,
       "second_opinion": "Neutral",
-      "second_confidence": 0.2607,
+      "second_confidence": 0.3141,
       "agreed": true
     },
     {
@@ -183,7 +187,7 @@
       "emotion": "Fear",
       "confidence": 0.396,
       "second_opinion": "Disgust",
-      "second_confidence": 0.3279,
+      "second_confidence": 0.2853,
       "agreed": false
     },
     {
@@ -194,7 +198,7 @@
       "emotion": "Fear",
       "confidence": 0.3814,
       "second_opinion": "Disgust",
-      "second_confidence": 0.5205,
+      "second_confidence": 0.5254,
       "agreed": false
     },
     {
@@ -205,7 +209,7 @@
       "emotion": "Neutral",
       "confidence": 0.5309,
       "second_opinion": "Disgust",
-      "second_confidence": 0.3909,
+      "second_confidence": 0.4267,
       "agreed": false
     },
     {
@@ -215,9 +219,9 @@
       "segments": 28,
       "emotion": "Fear",
       "confidence": 0.4318,
-      "second_opinion": "Neutral",
-      "second_confidence": 0.2626,
-      "agreed": false
+      "second_opinion": "Fear",
+      "second_confidence": 0.3005,
+      "agreed": true
     },
     {
       "scene": 17,
@@ -227,7 +231,7 @@
       "emotion": "Disgust",
       "confidence": 0.4256,
       "second_opinion": "Disgust",
-      "second_confidence": 0.3826,
+      "second_confidence": 0.5068,
       "agreed": true
     },
     {
@@ -238,7 +242,7 @@
       "emotion": "Neutral",
       "confidence": 0.4488,
       "second_opinion": "Sadness",
-      "second_confidence": 0.2922,
+      "second_confidence": 0.2939,
       "agreed": false
     },
     {
@@ -249,7 +253,7 @@
       "emotion": "Fear",
       "confidence": 0.3583,
       "second_opinion": "Neutral",
-      "second_confidence": 0.3952,
+      "second_confidence": 0.2934,
       "agreed": false
     },
     {
@@ -260,7 +264,7 @@
       "emotion": "Neutral",
       "confidence": 0.2787,
       "second_opinion": "Disgust",
-      "second_confidence": 0.3138,
+      "second_confidence": 0.3893,
       "agreed": false
     },
     {
@@ -270,9 +274,9 @@
       "segments": 11,
       "emotion": "Neutral",
       "confidence": 0.3957,
-      "second_opinion": "Neutral",
-      "second_confidence": 0.355,
-      "agreed": true
+      "second_opinion": "Fear",
+      "second_confidence": 0.3061,
+      "agreed": false
     },
     {
       "scene": 22,
@@ -281,8 +285,8 @@
       "segments": 24,
       "emotion": "Anger",
       "confidence": 0.2475,
-      "second_opinion": "Disgust",
-      "second_confidence": 0.2276,
+      "second_opinion": "Neutral",
+      "second_confidence": 0.2484,
       "agreed": false
     },
     {
@@ -292,9 +296,9 @@
       "segments": 4,
       "emotion": "Neutral",
       "confidence": 0.347,
-      "second_opinion": "Neutral",
-      "second_confidence": 0.4811,
-      "agreed": true
+      "second_opinion": "Disgust",
+      "second_confidence": 0.2632,
+      "agreed": false
     },
     {
       "scene": 24,
@@ -304,7 +308,7 @@
       "emotion": "Joy",
       "confidence": 0.3057,
       "second_opinion": "Neutral",
-      "second_confidence": 0.333,
+      "second_confidence": 0.3339,
       "agreed": false
     },
     {
@@ -315,7 +319,7 @@
       "emotion": "Sadness",
       "confidence": 0.3755,
       "second_opinion": "Neutral",
-      "second_confidence": 0.3109,
+      "second_confidence": 0.2877,
       "agreed": false
     },
     {
@@ -325,9 +329,9 @@
       "segments": 30,
       "emotion": "Neutral",
       "confidence": 0.2783,
-      "second_opinion": "Neutral",
-      "second_confidence": 0.2876,
-      "agreed": true
+      "second_opinion": "Disgust",
+      "second_confidence": 0.31,
+      "agreed": false
     },
     {
       "scene": 27,
@@ -337,7 +341,7 @@
       "emotion": "Fear",
       "confidence": 0.582,
       "second_opinion": "Fear",
-      "second_confidence": 0.3127,
+      "second_confidence": 0.6022,
       "agreed": true
     },
     {
@@ -348,7 +352,7 @@
       "emotion": "Joy",
       "confidence": 0.8252,
       "second_opinion": "Neutral",
-      "second_confidence": 0.4782,
+      "second_confidence": 0.4084,
       "agreed": false
     },
     {
@@ -359,7 +363,7 @@
       "emotion": "Joy",
       "confidence": 0.6861,
       "second_opinion": "Joy",
-      "second_confidence": 0.2732,
+      "second_confidence": 0.2402,
       "agreed": true
     },
     {
@@ -370,7 +374,7 @@
       "emotion": "Neutral",
       "confidence": 0.284,
       "second_opinion": "Disgust",
-      "second_confidence": 0.2391,
+      "second_confidence": 0.3033,
       "agreed": false
     },
     {
@@ -381,7 +385,7 @@
       "emotion": "Joy",
       "confidence": 0.4133,
       "second_opinion": "Neutral",
-      "second_confidence": 0.2621,
+      "second_confidence": 0.3038,
       "agreed": false
     },
     {
@@ -391,9 +395,9 @@
       "segments": 17,
       "emotion": "Neutral",
       "confidence": 0.351,
-      "second_opinion": "Neutral",
-      "second_confidence": 0.2139,
-      "agreed": true
+      "second_opinion": "Fear",
+      "second_confidence": 0.2022,
+      "agreed": false
     },
     {
       "scene": 33,
@@ -403,7 +407,7 @@
       "emotion": "Neutral",
       "confidence": 0.4218,
       "second_opinion": "Neutral",
-      "second_confidence": 0.3843,
+      "second_confidence": 0.4896,
       "agreed": true
     },
     {
@@ -414,7 +418,7 @@
       "emotion": "Joy",
       "confidence": 0.3965,
       "second_opinion": "Fear",
-      "second_confidence": 0.3103,
+      "second_confidence": 0.3635,
       "agreed": false
     },
     {
@@ -425,7 +429,7 @@
       "emotion": "Neutral",
       "confidence": 0.5452,
       "second_opinion": "Neutral",
-      "second_confidence": 0.4181,
+      "second_confidence": 0.4695,
       "agreed": true
     },
     {
@@ -435,8 +439,8 @@
       "segments": 26,
       "emotion": "Anger",
       "confidence": 0.2874,
-      "second_opinion": "Joy",
-      "second_confidence": 0.2095,
+      "second_opinion": "Disgust",
+      "second_confidence": 0.2011,
       "agreed": false
     },
     {
@@ -447,7 +451,7 @@
       "emotion": "Neutral",
       "confidence": 0.5251,
       "second_opinion": "Disgust",
-      "second_confidence": 0.3223,
+      "second_confidence": 0.3366,
       "agreed": false
     },
     {
@@ -457,9 +461,9 @@
       "segments": 6,
       "emotion": "Neutral",
       "confidence": 0.5563,
-      "second_opinion": "Neutral",
-      "second_confidence": 0.3907,
-      "agreed": true
+      "second_opinion": "Disgust",
+      "second_confidence": 0.2992,
+      "agreed": false
     },
     {
       "scene": 39,
@@ -469,7 +473,7 @@
       "emotion": "Joy",
       "confidence": 0.3708,
       "second_opinion": "Neutral",
-      "second_confidence": 0.4126,
+      "second_confidence": 0.3553,
       "agreed": false
     },
     {
@@ -480,7 +484,7 @@
       "emotion": "Neutral",
       "confidence": 0.3477,
       "second_opinion": "Neutral",
-      "second_confidence": 0.438,
+      "second_confidence": 0.3448,
       "agreed": true
     },
     {
@@ -491,7 +495,7 @@
       "emotion": "Neutral",
       "confidence": 0.3655,
       "second_opinion": "Neutral",
-      "second_confidence": 0.2497,
+      "second_confidence": 0.302,
       "agreed": true
     },
     {
@@ -502,7 +506,7 @@
       "emotion": "Neutral",
       "confidence": 0.3893,
       "second_opinion": "Neutral",
-      "second_confidence": 0.2862,
+      "second_confidence": 0.3368,
       "agreed": true
     },
     {
@@ -513,7 +517,7 @@
       "emotion": "Neutral",
       "confidence": 0.5437,
       "second_opinion": "Neutral",
-      "second_confidence": 0.3553,
+      "second_confidence": 0.3266,
       "agreed": true
     },
     {
@@ -524,7 +528,7 @@
       "emotion": "Neutral",
       "confidence": 0.5129,
       "second_opinion": "Joy",
-      "second_confidence": 0.3428,
+      "second_confidence": 0.3494,
       "agreed": false
     },
     {
@@ -535,7 +539,7 @@
       "emotion": "Disgust",
       "confidence": 0.2656,
       "second_opinion": "Fear",
-      "second_confidence": 0.2697,
+      "second_confidence": 0.2556,
       "agreed": false
     },
     {
@@ -546,7 +550,7 @@
       "emotion": "Sadness",
       "confidence": 0.435,
       "second_opinion": "Neutral",
-      "second_confidence": 0.2546,
+      "second_confidence": 0.2232,
       "agreed": false
     },
     {
@@ -557,7 +561,7 @@
       "emotion": "Neutral",
       "confidence": 0.4038,
       "second_opinion": "Neutral",
-      "second_confidence": 0.4206,
+      "second_confidence": 0.4074,
       "agreed": true
     },
     {
@@ -568,7 +572,7 @@
       "emotion": "Joy",
       "confidence": 0.4846,
       "second_opinion": "Neutral",
-      "second_confidence": 0.4085,
+      "second_confidence": 0.4121,
       "agreed": false
     },
     {
@@ -578,8 +582,8 @@
       "segments": 17,
       "emotion": "Anger",
       "confidence": 0.2605,
-      "second_opinion": "Neutral",
-      "second_confidence": 0.2464,
+      "second_opinion": "Disgust",
+      "second_confidence": 0.2855,
       "agreed": false
     },
     {
@@ -590,7 +594,7 @@
       "emotion": "Neutral",
       "confidence": 0.3436,
       "second_opinion": "Neutral",
-      "second_confidence": 0.465,
+      "second_confidence": 0.4178,
       "agreed": true
     },
     {
@@ -600,9 +604,9 @@
       "segments": 10,
       "emotion": "Joy",
       "confidence": 0.7449,
-      "second_opinion": "Neutral",
-      "second_confidence": 0.3013,
-      "agreed": false
+      "second_opinion": "Joy",
+      "second_confidence": 0.229,
+      "agreed": true
     },
     {
       "scene": 52,
@@ -612,7 +616,7 @@
       "emotion": "Fear",
       "confidence": 0.293,
       "second_opinion": "Fear",
-      "second_confidence": 0.2931,
+      "second_confidence": 0.3269,
       "agreed": true
     },
     {
@@ -623,7 +627,7 @@
       "emotion": "Surprise",
       "confidence": 0.6193,
       "second_opinion": "Joy",
-      "second_confidence": 0.3913,
+      "second_confidence": 0.4299,
       "agreed": false
     }
   ]

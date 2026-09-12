@@ -47,8 +47,10 @@ REGISTRY: dict[str, WeightSpec | str] = {
         url=f"{RELEASE}/weights-v1/emotion-timeline-distilbert-v1.safetensors",
         sha256="a4095f789c024d87ffc1f1d362d698263c5a4804e05e6c7972f7cd5a1a5f3520",
     ),
-    # The Russian half, and the classifier behind the timeline: it beat
-    # translating into distilbert-v1 by twelve points. See docs/russian.md.
+    # The Russian half, and the classifier behind the timeline: on ru-izard it
+    # beat translating into distilbert-v1 by eleven points. That corpus is
+    # DeepL-translated English, which handicaps the translated approach, so the
+    # margin is not a recommendation. See docs/russian.md.
     "rubert-v1": WeightSpec(
         url=f"{RELEASE}/weights-ru-v1/emotion-timeline-rubert-v1.safetensors",
         sha256="c94a09587021b58afcb863807c3cf7f2bfd1dab91f8e2f3020ec040b76a659e2",

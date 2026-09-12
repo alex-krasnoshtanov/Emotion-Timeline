@@ -22,6 +22,46 @@ THREE = ("Anger", "Disgust", "Fear")
 # --- the label maps ----------------------------------------------------------
 
 
+# --- the translator, and the bug that made approach A a measurement of itself ---
+
+
+def test_a_row_is_split_into_its_sentences_before_translation() -> None:
+    """Marian is a sentence model. Handed two, it translates one and says nothing."""
+    from emotion_timeline.russian import translate
+
+    assert translate.sentences("First one. Second one! Third?") == [
+        "First one.",
+        "Second one!",
+        "Third?",
+    ]
+
+
+def test_a_row_with_no_terminator_is_still_one_sentence() -> None:
+    from emotion_timeline.russian import translate
+
+    assert translate.sentences("no terminator here") == ["no terminator here"]
+    assert translate.sentences("   ") == []
+
+
+def test_an_ellipsis_ends_a_sentence_and_a_decimal_does_not() -> None:
+    from emotion_timeline.russian import translate
+
+    assert len(translate.sentences("Well\u2026 quite.")) == 2
+    assert len(translate.sentences("It cost 3.50 in total.")) == 1
+
+
+def test_the_translation_is_cleaned_the_way_the_training_set_was() -> None:
+    """The model was trained on cleaned text; raw translator output is a different surface."""
+    from emotion_timeline.russian import translate
+
+    cleaned = translate.to_model_english("Oh MY GOD, I missed it :( http://example.com")
+    assert "[CAPS]" in cleaned
+    assert ":(" not in cleaned
+    # The URL bug the dataset build has is reproduced, not fixed -- the model was
+    # trained on data carrying it. See CLAUDE.md.
+    assert "http/example.com" in cleaned
+
+
 def test_every_target_is_one_of_our_seven() -> None:
     assert maps.check_map(maps.MULTILINGUAL) == []
     assert set(maps.MULTILINGUAL.values()) <= set(EMOTIONS)
@@ -343,14 +383,30 @@ def test_every_approach_was_scored_on_the_same_rows() -> None:
     assert all(block["samples"] == 3_715 for block in report.approaches.values())
 
 
-def test_classifying_russian_directly_beats_translating_it() -> None:
-    """The question the original decided by judgement, answered by measurement."""
+def test_on_this_corpus_classifying_russian_directly_beats_translating_it() -> None:
+    """Measured -- and the name says "on this corpus" because that is the limit.
+
+    ru-izard is DeepL-translated English, so A translates twice to be scored here
+    and B trains on its own test distribution. The margin is real and it is not a
+    recommendation; see the chapter.
+    """
     approaches = committed().approaches
     native = float(approaches["B native ruBERT"]["accuracy"])
     translated = float(approaches["A translate, then ours"]["accuracy"])
     assert native == pytest.approx(0.4816, abs=5e-4)
-    assert translated == pytest.approx(0.3631, abs=5e-4)
+    assert translated == pytest.approx(0.3728, abs=5e-4)
     assert native > translated + 0.1
+
+
+def test_a_far_better_translator_does_not_close_the_gap() -> None:
+    """The control for "a better translator would have won". It would not have."""
+    approaches = committed().approaches
+    opus = float(approaches["A translate, then ours"]["accuracy"])
+    nllb = float(approaches["A-NLLB translate, then ours"]["accuracy"])
+    assert nllb == pytest.approx(0.3612, abs=5e-4)
+    # Six times the parameters, and on this set it does not even match opus-mt.
+    assert nllb < opus
+    assert nllb < float(approaches["B native ruBERT"]["accuracy"]) - 0.1
 
 
 def test_our_native_model_beats_the_one_the_pipeline_shipped() -> None:
@@ -377,8 +433,8 @@ def test_combining_them_does_not_raise_accuracy_at_full_coverage() -> None:
 def test_the_agreement_filter_buys_accuracy_and_pays_in_coverage() -> None:
     """Where they agree the answer is much better -- on 44% of the rows."""
     agreement = committed().combinations["agreement filter"]
-    assert float(agreement["accuracy"]) == pytest.approx(0.5604, abs=5e-4)
-    assert float(agreement["coverage"]) == pytest.approx(0.437, abs=5e-3)
+    assert float(agreement["accuracy"]) == pytest.approx(0.5718, abs=5e-4)
+    assert float(agreement["coverage"]) == pytest.approx(0.446, abs=5e-3)
     assert float(agreement["accuracy"]) > 0.48
 
 
@@ -413,8 +469,23 @@ def test_the_chapter_quotes_every_score_in_the_record() -> None:
 def test_the_chapter_says_the_ensemble_did_not_help() -> None:
     text = chapter()
     assert "does not raise accuracy" in text
-    assert "43.7%" in text
+    assert "44.6%" in text
 
 
 def test_the_chapter_ends_by_saying_what_it_does_not_establish() -> None:
     assert "## What this does not establish" in chapter()
+
+
+def test_the_chapter_says_what_the_corpus_is_and_what_that_costs_the_comparison() -> None:
+    """The audit's finding. Without this sentence the table reads as a recommendation."""
+    text = chapter()
+    assert "DeepL-translated GoEmotions" in text
+    assert "translates twice" in text
+    assert "is **not supported**" in text
+
+
+def test_the_chapter_owns_the_bug_rather_than_quietly_fixing_it() -> None:
+    """0.3631 was partly a broken harness. The correction is published, not buried."""
+    text = chapter()
+    assert "0.3631" in text and "0.3728" in text
+    assert "88.1%" in text

@@ -1,0 +1,47 @@
+{
+  "_comment": [
+    "What translation costs this classifier, measured on its own English",
+    "held-out rows so that domain, labels and annotator are held constant.",
+    "Each engine round-trips the rows English -> Russian -> English; the",
+    "drop from the baseline is the translation and nothing else. A round",
+    "trip is two passes where the pipeline makes one, so every cost here",
+    "is an upper bound. Written by `emotion-timeline translation-cost`."
+  ],
+  "rows": 3000,
+  "sampled_from": 62877,
+  "seed": 20251115,
+  "baseline": {
+    "accuracy": 0.918,
+    "macro_f1": 0.8009,
+    "markers": {
+      "[CAPS]": 0.0117,
+      "!": 0.0343,
+      "?": 0.0213,
+      "...": 0.0003
+    }
+  },
+  "engines": {
+    "opus-mt": {
+      "model": "Helsinki-NLP/opus-mt-en-ru + Helsinki-NLP/opus-mt-ru-en",
+      "accuracy": 0.548,
+      "macro_f1": 0.4399,
+      "markers": {
+        "[CAPS]": 0.0083,
+        "!": 0.0323,
+        "?": 0.0243,
+        "...": 0.0
+      }
+    },
+    "NLLB-600M": {
+      "model": "facebook/nllb-200-distilled-600M",
+      "accuracy": 0.575,
+      "macro_f1": 0.447,
+      "markers": {
+        "[CAPS]": 0.016,
+        "!": 0.0317,
+        "?": 0.0283,
+        "...": 0.0
+      }
+    }
+  }
+}

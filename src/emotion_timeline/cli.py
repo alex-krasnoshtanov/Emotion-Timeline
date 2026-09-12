@@ -649,6 +649,21 @@ def cmd_russian(args: argparse.Namespace) -> int:
     print()
     for line in compare.describe(scored):
         print(line)
+
+    priced = Path(args.translation_cost)
+    if priced.exists():
+        from emotion_timeline.russian import cost
+
+        priced_report = cost.TranslationCost.load(priced)
+        problems = cost.check_consistency(priced_report)
+        for problem in problems:
+            print(f"inconsistent record: {problem}", file=sys.stderr)
+        if problems:
+            return 1
+        print()
+        print("  and what translation costs, with everything else held constant:")
+        for line in cost.describe(priced_report):
+            print(line)
     return 0
 
 
@@ -696,6 +711,13 @@ def cmd_compare_russian(args: argparse.Namespace) -> int:  # pragma: no cover - 
     a_validation, _ = baselines.predict(args.weights, english["validation"], multi_label=False)
     a_test, _ = baselines.predict(args.weights, english["test"], multi_label=False)
 
+    # The control for "a better translator would have won". `translation-cost`
+    # already prices the two engines against each other on English rows; this is
+    # the same question asked on the rows the ranking is actually decided on.
+    print(f"A-NLLB: translating with {translate.NLLB}")
+    nllb_english = translate.translate(test["texts"], model_id=translate.NLLB, progress=print)
+    nllb_test, _ = baselines.predict(args.weights, nllb_english, multi_label=False)
+
     print(f"B: {args.rubert}")
     b_archive = np.load(args.rubert_predictions)
     b_validation = evaluate.softmax(b_archive["validation_logits"])
@@ -722,6 +744,12 @@ def cmd_compare_russian(args: argparse.Namespace) -> int:  # pragma: no cover - 
         "model": args.rubert,
         "temperature": round(temperatures["B"], 4),
         "probabilities": evaluate.softmax(np.log(np.clip(b_test, 1e-12, None)), temperatures["B"]),
+    }
+
+    approaches["A-NLLB translate, then ours"] = {
+        "what": "",
+        "model": f"{translate.NLLB} + {args.weights}",
+        "probabilities": nllb_test,
     }
 
     for key, model_id, mapping, approximate in (
@@ -885,6 +913,73 @@ def cmd_timeline(args: argparse.Namespace) -> int:
     print(f"wrote {written}")
     for path in drawn:
         print(f"wrote {path}")
+    return 0
+
+
+def cmd_translation_cost(args: argparse.Namespace) -> int:  # pragma: no cover - runs two engines
+    """Round-trip the model's own English rows and price what translation costs."""
+    import numpy as np
+    import pandas as pd
+
+    from emotion_timeline.data.labels import EMOTIONS
+    from emotion_timeline.russian import baselines, cost, translate
+    from emotion_timeline.training import evaluate, run, splits
+    from emotion_timeline.training.summary import MARKERS
+
+    manifest = splits.SplitManifest.load(args.manifest)
+    frame = pd.read_csv(args.dataset)
+    texts = [str(v) for v in frame["text"]]
+    labels = [str(v) for v in frame["label"]]
+    keys = splits.row_keys(texts, labels, [str(v) for v in frame["source"]], seed=manifest.seed)
+    assignment = splits.assign(keys, labels, manifest.fraction)
+    held = [index for index, split in enumerate(assignment) if split == splits.TEST]
+
+    rng = np.random.default_rng(manifest.seed)
+    size = min(args.rows, len(held))
+    picked = sorted(rng.choice(len(held), size=size, replace=False).tolist())
+    rows = [held[index] for index in picked]
+    english = [texts[index] for index in rows]
+    truth = [labels[index] for index in rows]
+    print(f"{size:,} of {len(held):,} English held-out rows")
+
+    def score(candidate: list[str]) -> dict[str, Any]:
+        probabilities, _ = baselines.predict(args.weights, candidate, multi_label=False)
+        predicted = [EMOTIONS[index] for index in probabilities.argmax(axis=1)]
+        matrix = evaluate.confusion(truth, predicted, EMOTIONS)
+        scores = evaluate.class_scores(matrix, EMOTIONS)
+        return {
+            "accuracy": round(evaluate.accuracy_of(matrix), 4),
+            "macro_f1": round(evaluate.macro(scores, "f1"), 4),
+            "markers": cost.marker_shares(candidate, list(MARKERS.values())),
+        }
+
+    baseline = score(english)
+    print(f"  untranslated: {baseline['accuracy']:.4f}")
+
+    engines: dict[str, Any] = {}
+    for name, out_id, back_id in (
+        ("opus-mt", translate.BACKWARDS, translate.MODEL),
+        ("NLLB-600M", translate.NLLB, translate.NLLB),
+    ):
+        print(f"{name}: English -> Russian ...")
+        russian = translate.translate(
+            english, model_id=out_id, clean_output=False, source="en", target="ru"
+        )
+        print(f"{name}: Russian -> English ...")
+        back = translate.translate(russian, model_id=back_id, clean_output=True)
+        engines[name] = {"model": f"{out_id} + {back_id}" if out_id != back_id else out_id}
+        engines[name].update(score(back))
+        print(f"  {name}: {engines[name]['accuracy']:.4f}")
+
+    record = cost.build_record(
+        baseline, engines, rows=size, sampled_from=len(held), seed=manifest.seed
+    )
+    written = run.write_record(record, args.out)
+    print()
+    for line in cost.describe(cost.TranslationCost.load(written)):
+        print(line)
+    print()
+    print(f"wrote {written}")
     return 0
 
 
@@ -1187,6 +1282,9 @@ def build_parser() -> argparse.ArgumentParser:
     russian_parser.add_argument(
         "--comparison", default=str(BENCHMARKS / "russian" / "comparison.json")
     )
+    russian_parser.add_argument(
+        "--translation-cost", default=str(BENCHMARKS / "russian" / "translation-cost.json")
+    )
     russian_parser.set_defaults(func=cmd_russian)
 
     compare_russian_parser = sub.add_parser(
@@ -1287,6 +1385,26 @@ def build_parser() -> argparse.ArgumentParser:
         help="another timeline record; reports how much runtime the two put the same emotion on",
     )
     timeline_parser.set_defaults(func=cmd_timeline)
+
+    translation_cost_parser = sub.add_parser(
+        "translation-cost",
+        help="price what translation costs, on the model's own rows (needs --extra model)",
+        description=(
+            "Round-trips the English held-out rows through two translation "
+            "engines and re-scores them. Domain, labels and annotator are held "
+            "constant, so the drop is the translation and nothing else."
+        ),
+    )
+    translation_cost_parser.add_argument("--dataset", default="data/dataset.csv")
+    translation_cost_parser.add_argument(
+        "--manifest", default=str(BENCHMARKS / "training" / "split-manifest.json")
+    )
+    translation_cost_parser.add_argument("--weights", default="models/distilbert-v1")
+    translation_cost_parser.add_argument("--rows", type=int, default=3000)
+    translation_cost_parser.add_argument(
+        "--out", default=str(BENCHMARKS / "russian" / "translation-cost.json")
+    )
+    translation_cost_parser.set_defaults(func=cmd_translation_cost)
 
     errors_parser = sub.add_parser(
         "errors",

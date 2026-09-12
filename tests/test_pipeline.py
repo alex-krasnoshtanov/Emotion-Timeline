@@ -215,7 +215,7 @@ def test_documentary_narration_comes_out_mostly_neutral() -> None:
 def test_the_agreement_rate_carries_its_caveat() -> None:
     """It is a consistency signal. The record has to say so, beside the number."""
     agreement = committed().agreement
-    assert agreement["scenes"] == 22
+    assert agreement["scenes"] == 17
     assert "not an accuracy" in agreement["caveat"]
     assert "ru-izard" in agreement["measured_on"]
 
@@ -328,7 +328,7 @@ def test_describe_names_the_two_models_and_the_agreement() -> None:
     out = "\n".join(pipeline.describe(committed()))
     assert "47 scenes" in out and "1s silence gap" in out
     assert "ruBERT" in out and "translate" in out
-    assert "agree on 22 of 47" in out
+    assert "agree on 17 of 47" in out
     assert "not an accuracy" in out
 
 
@@ -338,7 +338,7 @@ def test_describe_names_the_two_models_and_the_agreement() -> None:
 def test_the_second_opinion_leans_disgust() -> None:
     """A says Disgust sixteen times where B says it three. The chapter says so."""
     scenes = committed().scenes
-    assert sum(1 for scene in scenes if scene["second_opinion"] == "Disgust") == 17
+    assert sum(1 for scene in scenes if scene["second_opinion"] == "Disgust") == 24
     assert sum(1 for scene in scenes if scene["emotion"] == "Disgust") == 4
 
 
@@ -348,7 +348,7 @@ def test_agreement_and_confidence_move_together() -> None:
     agreed = [float(s["confidence"]) for s in scenes if s["agreed"]]
     split = [float(s["confidence"]) for s in scenes if not s["agreed"]]
     assert round(sum(agreed) / len(agreed), 3) == 0.422
-    assert round(sum(split) / len(split), 3) == 0.377
+    assert round(sum(split) / len(split), 3) == 0.384
 
 
 def test_the_confidences_are_low_and_the_chapter_admits_it() -> None:
@@ -358,15 +358,15 @@ def test_the_confidences_are_low_and_the_chapter_admits_it() -> None:
     assert "0.382" in (ROOT / "docs" / "pipeline.md").read_text(encoding="utf-8")
 
 
-def test_the_loudest_scene_is_agreed_and_so_are_the_three_quietest() -> None:
+def test_the_loudest_scene_is_agreed_and_so_are_the_two_quietest() -> None:
     """The claim the chapter closes its results on: agreement is not confidence."""
     speaking = [s for s in committed().scenes if s["emotion"] != "Neutral"]
     ranked = sorted(speaking, key=lambda s: float(s["confidence"]))
     loudest = ranked[-1]
     assert (loudest["emotion"], float(loudest["confidence"])) == ("Joy", 0.7691)
     assert loudest["agreed"]
-    assert [float(s["confidence"]) for s in ranked[:3]] == [0.2297, 0.2370, 0.2458]
-    assert all(s["agreed"] for s in ranked[:3])
+    assert [float(s["confidence"]) for s in ranked[:2]] == [0.2297, 0.2370]
+    assert all(s["agreed"] for s in ranked[:2])
 
 
 def test_the_readme_quotes_the_record_it_was_built_from() -> None:

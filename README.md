@@ -3,7 +3,7 @@
 **Turning a Russian-language video into a per-scene emotion timeline** — and the
 dataset, model selection and error analysis that had to happen first.
 
-![47 scenes over 52 minutes; the two models agree on 47% of them](assets/emotion-timeline.png)
+![47 scenes over 52 minutes; the two models agree on 36% of them](assets/emotion-timeline.png)
 
 A real 51-minute Russian documentary, 316 transcript segments grouped into 47
 scenes, each read by two models trained on different languages. The band is solid
@@ -315,48 +315,65 @@ Full chapter: [`docs/fine-tune.md`](docs/fine-tune.md).
 
 ---
 
-## Result: Russian, translated or native
+## Result: Russian, translated or native — and what translation costs
 
 The pipeline reads Russian; everything else here trains on English. The original
 resolved that by judgement — no good Russian dataset, so translate — and never
-scored the decision. `Djacon/ru-izard-emotions` held out makes it arithmetic.
+scored the decision.
 
 ```bash
-uv run emotion-timeline russian      # reads only committed records
+uv run emotion-timeline russian            # reads only committed records
+uv run emotion-timeline translation-cost   # prices translation on its own
 ```
 
 ![B native ruBERT wins outright; combining only helps where both models agree](assets/russian-approaches.png)
 
 | | | Accuracy | Coverage |
 | --- | --- | ---: | ---: |
-| A | translate, then our English model | 0.3631 | all |
+| A | translate with `opus-mt`, then our English model | 0.3728 | all |
+| A-NLLB | translate with `NLLB-600M` instead | 0.3612 | all |
 | **B** | **`rubert-base-cased` fine-tuned here** | **0.4816** | all |
 | C | a multilingual model off the shelf | 0.3157 | all |
 | D | the one the pipeline actually shipped | 0.4538 | all |
-| | soft vote of A and B | 0.4799 | all |
-| | confidence pick | 0.4781 | all |
-| | **agreement filter** | **0.5604** | **43.7%** |
+| | soft vote of A and B | 0.4770 | all |
+| | confidence pick | 0.4791 | all |
+| | **agreement filter** | **0.5718** | **44.6%** |
 
-**Classifying Russian directly beats translating it by twelve points**, so the
-original's judgement was wrong. It also beats the model the pipeline shipped —
-which was itself trained on this corpus, making its 0.4538 an upper bound rather
-than a measurement.
+**On this corpus a native model wins by eleven points**, and beats the model the
+pipeline shipped — which was itself trained on this corpus, making its 0.4538 an
+upper bound rather than a measurement.
 
 **Combining two models does not raise accuracy.** Both full-coverage rules land
-*below* the stronger model alone: averaging a 0.36 model into a 0.48 one drags it
-down. That is the answer to the cross-validation the original marked "future" and
-never built.
+below the stronger model alone. That is the answer to the cross-validation the
+original marked "future" and never built. Where it pays is as a *filter*: on the
+44.6% of rows where the two agree, accuracy is 0.5718 — nine points above either
+alone. Not a better classifier; a believe-this / look-at-that signal, which is
+what the timeline uses.
 
-**Where it pays is as a filter.** On the 43.7% of rows where the two agree,
-accuracy is 0.5604 — eight points above either alone. Not a better classifier; a
-usable *believe this one / look at that one* signal, which is what a timeline
-needs. The coverage is published with the accuracy every time, because an accuracy
-over the rows two models happened to agree on is the same mistake as the 240-row
-word error rate this repository opens with.
+**Then: what does translation actually cost?** The comparison above cannot say,
+because A's number carries translation *and* domain *and* one annotator's
+conventions against another's. So the model's own English held-out rows were
+round-tripped English → Russian → English, holding everything else fixed:
 
-Every number here is far below the 0.9164 the same English model reaches on
-English, and language is only part of why: this set is **31.3% Neutral** against
-the English training set's 3.2%, on the class the model is already worst at.
+| | Accuracy |
+| --- | ---: |
+| The English rows themselves | **0.9180** |
+| after `opus-mt` round trip | 0.5480 |
+| after `NLLB-600M` round trip | 0.5750 |
+
+**Translation costs this classifier a third of its accuracy**, and a translator six
+times the size recovers 0.0270 of the 0.3700 — seven per cent of the loss. The
+surface markers the model leans on survive intact, so that is not the mechanism
+either. A meaning-preserving rewrite destroys most of what 0.9164 was measuring,
+which says more about the classifier than about translation.
+
+> **An audit corrected this chapter.** It previously reported A at 0.3631 and
+> concluded the coursework's judgement to translate was wrong. The translation
+> harness was dropping sentences — `opus-mt` is sentence-level, and **88% of
+> multi-sentence rows came back short** — and the conclusion reached further than
+> the evidence. ru-izard is *DeepL-translated GoEmotions*, so it makes the
+> translated approach translate twice and lets the native one train on its own
+> test distribution. The ranking survives; the recommendation does not.
 
 Full chapter: [`docs/russian.md`](docs/russian.md).
 
@@ -377,7 +394,7 @@ uv run emotion-timeline timeline --against benchmarks/pipeline/timeline-whisper.
 | Segments | 316 |
 | Scenes, at a 1s silence gap | 47 |
 | Recording | 51.6 minutes |
-| Scenes the two models agree on | 22 (46.8%) |
+| Scenes the two models agree on | 17 (36.2%) |
 | Median calibrated confidence | 0.382 |
 
 **One model answers; the other is asked anyway.** No combination rule beat the
@@ -407,7 +424,7 @@ is now a fixed 400-character chunk — sized so neither model truncates — whic
 one reason for the gap removed, not the gap.
 
 **None of this is an accuracy.** The recording has no labels and never will have.
-46.8% is consistency between two models, 62.0% consistency between two
+36.2% is consistency between two models, 62.0% consistency between two
 transcripts, and the median confidence of 0.382 says the classifier is rarely sure
 on documentary speech.
 
@@ -574,7 +591,7 @@ numbers from a command, and ends its chapter by saying what it does not establis
 | The trained classifier's records | `model` | [model.md](docs/model.md) |
 | Where it fails | `errors` | [error-analysis.md](docs/error-analysis.md) |
 | A model that exists | `split`, `fine-tune`, `summarise`, `training` | [fine-tune.md](docs/fine-tune.md) |
-| Russian, translated or native | `russian`, `build-russian`, `compare-russian` | [russian.md](docs/russian.md) |
+| Russian, and what translation costs | `russian`, `compare-russian`, `translation-cost` | [russian.md](docs/russian.md) |
 | The timeline, on a real recording | `timeline`, `score-timeline` | [pipeline.md](docs/pipeline.md) |
 
 **Still open.** The nine families rerun on one feature pipeline and one held-out

@@ -12,53 +12,53 @@
     "A translate, then ours": {
       "what": "",
       "model": "Helsinki-NLP/opus-mt-ru-en + models/distilbert-v1",
-      "temperature": 2.6193,
+      "temperature": 2.5908,
       "samples": 3715,
-      "accuracy": 0.3631,
-      "macro_f1": 0.3276,
-      "weighted_f1": 0.3579,
+      "accuracy": 0.3728,
+      "macro_f1": 0.3443,
+      "weighted_f1": 0.3673,
       "classes": {
         "Anger": {
           "support": 360,
-          "precision": 0.1757,
-          "recall": 0.1167,
-          "f1": 0.1402
+          "precision": 0.2179,
+          "recall": 0.1417,
+          "f1": 0.1717
         },
         "Disgust": {
           "support": 407,
-          "precision": 0.2576,
-          "recall": 0.5381,
-          "f1": 0.3484
+          "precision": 0.2751,
+          "recall": 0.6339,
+          "f1": 0.3836
         },
         "Fear": {
           "support": 285,
-          "precision": 0.4,
-          "recall": 0.393,
-          "f1": 0.3965
+          "precision": 0.3659,
+          "recall": 0.4211,
+          "f1": 0.3915
         },
         "Joy": {
           "support": 687,
-          "precision": 0.4718,
-          "recall": 0.377,
-          "f1": 0.4191
+          "precision": 0.4643,
+          "recall": 0.4352,
+          "f1": 0.4493
         },
         "Neutral": {
           "support": 1163,
-          "precision": 0.4187,
-          "recall": 0.4497,
-          "f1": 0.4337
+          "precision": 0.4452,
+          "recall": 0.3878,
+          "f1": 0.4145
         },
         "Sadness": {
           "support": 568,
-          "precision": 0.3808,
-          "recall": 0.2447,
-          "f1": 0.298
+          "precision": 0.39,
+          "recall": 0.2465,
+          "f1": 0.302
         },
         "Surprise": {
           "support": 245,
-          "precision": 0.3005,
-          "recall": 0.2245,
-          "f1": 0.257
+          "precision": 0.3317,
+          "recall": 0.2694,
+          "f1": 0.2973
         }
       }
     },
@@ -112,6 +112,58 @@
           "precision": 0.5152,
           "recall": 0.4163,
           "f1": 0.4605
+        }
+      }
+    },
+    "A-NLLB translate, then ours": {
+      "what": "",
+      "model": "facebook/nllb-200-distilled-600M + models/distilbert-v1",
+      "samples": 3715,
+      "accuracy": 0.3612,
+      "macro_f1": 0.3291,
+      "weighted_f1": 0.3559,
+      "classes": {
+        "Anger": {
+          "support": 360,
+          "precision": 0.1673,
+          "recall": 0.1278,
+          "f1": 0.1449
+        },
+        "Disgust": {
+          "support": 407,
+          "precision": 0.2689,
+          "recall": 0.6216,
+          "f1": 0.3754
+        },
+        "Fear": {
+          "support": 285,
+          "precision": 0.3791,
+          "recall": 0.4456,
+          "f1": 0.4097
+        },
+        "Joy": {
+          "support": 687,
+          "precision": 0.4758,
+          "recall": 0.4294,
+          "f1": 0.4514
+        },
+        "Neutral": {
+          "support": 1163,
+          "precision": 0.4289,
+          "recall": 0.3758,
+          "f1": 0.4005
+        },
+        "Sadness": {
+          "support": 568,
+          "precision": 0.396,
+          "recall": 0.2412,
+          "f1": 0.2998
+        },
+        "Surprise": {
+          "support": 245,
+          "precision": 0.2626,
+          "recall": 0.1918,
+          "f1": 0.2217
         }
       }
     },
@@ -230,154 +282,154 @@
   "combinations": {
     "soft vote": {
       "samples": 3715,
-      "accuracy": 0.4799,
-      "macro_f1": 0.4596,
-      "weighted_f1": 0.4741,
+      "accuracy": 0.477,
+      "macro_f1": 0.4591,
+      "weighted_f1": 0.4712,
       "classes": {
         "Anger": {
           "support": 360,
-          "precision": 0.2888,
+          "precision": 0.2967,
           "recall": 0.15,
-          "f1": 0.1974
+          "f1": 0.1993
         },
         "Disgust": {
           "support": 407,
-          "precision": 0.3515,
-          "recall": 0.5061,
-          "f1": 0.4149
+          "precision": 0.3501,
+          "recall": 0.5307,
+          "f1": 0.4219
         },
         "Fear": {
           "support": 285,
-          "precision": 0.6679,
-          "recall": 0.6351,
-          "f1": 0.6511
+          "precision": 0.6727,
+          "recall": 0.6491,
+          "f1": 0.6607
         },
         "Joy": {
           "support": 687,
-          "precision": 0.5552,
-          "recall": 0.5488,
-          "f1": 0.552
+          "precision": 0.5399,
+          "recall": 0.5517,
+          "f1": 0.5457
         },
         "Neutral": {
           "support": 1163,
-          "precision": 0.4847,
-          "recall": 0.5443,
-          "f1": 0.5128
+          "precision": 0.4887,
+          "recall": 0.5185,
+          "f1": 0.5031
         },
         "Sadness": {
           "support": 568,
-          "precision": 0.4632,
-          "recall": 0.4208,
+          "precision": 0.459,
+          "recall": 0.4243,
           "f1": 0.441
         },
         "Surprise": {
           "support": 245,
-          "precision": 0.5471,
-          "recall": 0.3796,
-          "f1": 0.4482
+          "precision": 0.5222,
+          "recall": 0.3837,
+          "f1": 0.4424
         }
       }
     },
     "confidence pick": {
       "samples": 3715,
-      "accuracy": 0.4781,
-      "macro_f1": 0.454,
-      "weighted_f1": 0.4705,
+      "accuracy": 0.4791,
+      "macro_f1": 0.4581,
+      "weighted_f1": 0.4721,
       "classes": {
         "Anger": {
           "support": 360,
-          "precision": 0.2767,
-          "recall": 0.1222,
-          "f1": 0.1696
+          "precision": 0.2981,
+          "recall": 0.1333,
+          "f1": 0.1843
         },
         "Disgust": {
           "support": 407,
-          "precision": 0.3413,
-          "recall": 0.4939,
-          "f1": 0.4036
+          "precision": 0.3397,
+          "recall": 0.5209,
+          "f1": 0.4113
         },
         "Fear": {
           "support": 285,
-          "precision": 0.6486,
-          "recall": 0.6281,
-          "f1": 0.6381
+          "precision": 0.6454,
+          "recall": 0.6386,
+          "f1": 0.642
         },
         "Joy": {
           "support": 687,
-          "precision": 0.5402,
-          "recall": 0.5764,
-          "f1": 0.5577
+          "precision": 0.526,
+          "recall": 0.5881,
+          "f1": 0.5553
         },
         "Neutral": {
           "support": 1163,
-          "precision": 0.4924,
-          "recall": 0.5288,
-          "f1": 0.51
+          "precision": 0.5043,
+          "recall": 0.5056,
+          "f1": 0.5049
         },
         "Sadness": {
           "support": 568,
-          "precision": 0.4648,
-          "recall": 0.4296,
-          "f1": 0.4465
+          "precision": 0.4696,
+          "recall": 0.4349,
+          "f1": 0.4516
         },
         "Surprise": {
           "support": 245,
-          "precision": 0.5272,
-          "recall": 0.3959,
-          "f1": 0.4522
+          "precision": 0.5266,
+          "recall": 0.4041,
+          "f1": 0.4573
         }
       }
     },
     "agreement filter": {
-      "samples": 1622,
-      "accuracy": 0.5604,
-      "macro_f1": 0.5112,
-      "weighted_f1": 0.549,
+      "samples": 1658,
+      "accuracy": 0.5718,
+      "macro_f1": 0.5318,
+      "weighted_f1": 0.5619,
       "classes": {
         "Anger": {
           "support": 122,
-          "precision": 0.2444,
-          "recall": 0.0902,
-          "f1": 0.1317
+          "precision": 0.3721,
+          "recall": 0.1311,
+          "f1": 0.1939
         },
         "Disgust": {
-          "support": 189,
-          "precision": 0.4803,
-          "recall": 0.6455,
-          "f1": 0.5508
+          "support": 191,
+          "precision": 0.4825,
+          "recall": 0.7225,
+          "f1": 0.5786
         },
         "Fear": {
-          "support": 152,
-          "precision": 0.8016,
-          "recall": 0.6645,
-          "f1": 0.7266
+          "support": 156,
+          "precision": 0.7744,
+          "recall": 0.6603,
+          "f1": 0.7128
         },
         "Joy": {
-          "support": 345,
-          "precision": 0.6623,
-          "recall": 0.5797,
-          "f1": 0.6182
+          "support": 363,
+          "precision": 0.6417,
+          "recall": 0.6364,
+          "f1": 0.639
         },
         "Neutral": {
           "support": 490,
-          "precision": 0.5168,
-          "recall": 0.6898,
-          "f1": 0.5909
+          "precision": 0.5354,
+          "recall": 0.6327,
+          "f1": 0.58
         },
         "Sadness": {
-          "support": 223,
-          "precision": 0.55,
-          "recall": 0.4439,
-          "f1": 0.4913
+          "support": 230,
+          "precision": 0.5622,
+          "recall": 0.4522,
+          "f1": 0.5012
         },
         "Surprise": {
-          "support": 101,
-          "precision": 0.623,
-          "recall": 0.3762,
-          "f1": 0.4691
+          "support": 106,
+          "precision": 0.6389,
+          "recall": 0.434,
+          "f1": 0.5169
         }
       },
-      "coverage": 0.4366
+      "coverage": 0.4463
     }
   }
 }

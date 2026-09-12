@@ -110,7 +110,7 @@ def test_timeline_prints_the_scene_breakdown_and_the_agreement(
     assert "47 scenes at a 1s silence gap" in out
     # The headline of the chapter: a documentary narration is mostly Neutral.
     assert "Neutral   26  55.3%" in out
-    assert "agree on 22 of 47 scenes (46.8%)" in out
+    assert "agree on 17 of 47 scenes (36.2%)" in out
     assert "not an accuracy" in out
 
 
@@ -928,6 +928,9 @@ def test_russian_prints_the_comparison_when_it_exists(
     assert "B native ruBERT" in out
     assert "agreement filter" in out
     assert "trained on the corpus" in out
+    # The audit's evidence travels with the ranking it qualifies.
+    assert "what translation costs" in out
+    assert "the paraphrase, not the translator" in out
 
 
 def test_russian_refuses_an_inconsistent_comparison(

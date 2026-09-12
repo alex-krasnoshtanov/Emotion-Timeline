@@ -12,7 +12,7 @@ uv run emotion-timeline timeline --against benchmarks/pipeline/timeline-whisper.
 uv run emotion-timeline score-timeline   # reruns both models over the transcript
 ```
 
-![47 scenes over 52 minutes; the two models agree on 47% of them](../assets/emotion-timeline.png)
+![47 scenes over 52 minutes; the two models agree on 36% of them](../assets/emotion-timeline.png)
 
 ## The seam
 
@@ -87,7 +87,7 @@ Two transcripts of the same 51 minutes, the same pipeline over both:
 | Scenes | 47 | 54 |
 | Chunks | 142 | 132 |
 | Neutral, by runtime | 66.4% | 44.0% |
-| The two models agree | 46.8% | 42.6% |
+| The two models agree | 36.2% | 33.3% |
 
 **They put the same emotion on 62.0% of the 2,740 seconds both cover.** Not 95%,
 and not noise either. Two-thirds of the disagreement is one-directional —
@@ -106,7 +106,7 @@ recomputable: both transcripts and both timelines are committed, and
 | Segments | 316 |
 | Scenes, at a 1s silence gap | 47 |
 | Recording | 51.6 minutes |
-| Scenes the two models agree on | 22 (46.8%) |
+| Scenes the two models agree on | 17 (36.2%) |
 | Median calibrated confidence | 0.382 |
 
 **Just over half the episode is Neutral**, which is the correct answer for
@@ -124,9 +124,9 @@ scenes that are not Neutral land where the episode turns:
 | 51.3m | **Surprise** | 0.6585 | | *"an interesting day. Busy. And now I can finally relax"* |
 
 The 49.5-minute scene is the most confident non-Neutral reading in the episode and
-both models agree on it. The three least confident, at 0.2297, 0.2370 and 0.2458, are
-agreed too — which is the clearest reminder available that agreement is not
-confidence, and that neither is accuracy.
+both models agree on it. So are the two *least* confident, at 0.2297 and 0.2370 —
+which is the clearest reminder available that agreement is not confidence, and
+that neither is accuracy.
 
 **One is plainly wrong**, and it is worth naming: at 37.6 minutes *"oh, brilliant!
 And they are handing out sweets!"* comes back **Anger**. The two models split on
@@ -135,16 +135,22 @@ opinion at all.
 
 ### The second opinion has a tell
 
-A predicts **Disgust on 17 of 47 scenes**; B predicts it on 4. On a recording
-about drug trafficking Disgust is not an absurd answer, but seventeen times is not
-a reading of the material — it is a systematic lean, from the model that scored
-0.3631 on ru-izard against B's 0.4816. Given that, the sensible use of A is as a
-dissent signal rather than a vote, which is what it is.
+A predicts **Disgust on 24 of 47 scenes**; B predicts it on 4. On a recording
+about drug trafficking Disgust is not an absurd answer, but half the episode is
+not a reading of the material — it is a systematic lean, from the model that
+scored 0.3728 on ru-izard against B's 0.4816.
+
+The lean got **worse** when the translator was fixed. An audit found `opus-mt` was
+dropping sentences ([`russian.md`](russian.md) has the numbers), and with whole
+paragraphs reaching the English model rather than their first sentences, A's
+Disgust calls went from 17 to 24 and agreement fell from 46.8% to 36.2%. A fix
+that makes two models agree less is the useful kind: the earlier agreement was
+partly an artefact of feeding one of them less text.
 
 ### Agreement and confidence move together, slightly
 
 Scenes the two models agree on carry a mean calibrated confidence of **0.422**
-against **0.377** where they split. Two signals never fitted to each other point
+against **0.384** where they split. Two signals never fitted to each other point
 the same way. It is mild corroboration that agreement tracks something, and the
 gap is small enough that it is worth no more than that.
 
@@ -171,13 +177,19 @@ as the wrong language and transcribe into it without complaining.
 
 ## What this does not establish
 
-- **Not an accuracy.** There are no labels on this recording. 46.8% is a
+- **Not an accuracy.** There are no labels on this recording. 36.2% is a
   consistency figure between two models, and 62.0% a consistency figure between
   two transcripts. Two models can agree and both be wrong, and on out-of-domain
   text they will do that more often than the ru-izard number suggests.
 - **The models are not independent.** Both were scored on ru-izard, B was trained
   on it, and A ends in a model trained to the same seven-class collapse. Their
   errors correlate more than "two opinions" implies.
+- **A is weaker here than the ru-izard table suggests, and B may be stronger.**
+  ru-izard is DeepL-translated English, so it makes A translate twice and lets B
+  train on its own test distribution. This recording is native Russian speech,
+  where neither handicap applies — so the 0.3728-against-0.4816 gap is not the
+  right prior for what these two are doing here. [`russian.md`](russian.md) says
+  why, and nothing available measures the native case.
 - **The confidences are low, and that is the honest reading.** A median of 0.382
   after calibration says the model is rarely sure on documentary speech. It is
   trained on social-media register and this is narration, and the temperature
