@@ -333,6 +333,61 @@ def test_describe_names_the_two_models_and_the_agreement() -> None:
     assert "not an accuracy" in out
 
 
+# --- what the chapter and the README publish ---------------------------------
+
+
+def test_the_second_opinion_leans_disgust() -> None:
+    """A says Disgust sixteen times where B says it three. The chapter says so."""
+    scenes = committed().scenes
+    assert sum(1 for scene in scenes if scene["second_opinion"] == "Disgust") == 16
+    assert sum(1 for scene in scenes if scene["emotion"] == "Disgust") == 3
+
+
+def test_agreement_and_confidence_move_together() -> None:
+    """Two signals never fitted to each other, pointing the same way."""
+    scenes = committed().scenes
+    agreed = [float(s["confidence"]) for s in scenes if s["agreed"]]
+    split = [float(s["confidence"]) for s in scenes if not s["agreed"]]
+    assert round(sum(agreed) / len(agreed), 3) == 0.456
+    assert round(sum(split) / len(split), 3) == 0.388
+
+
+def test_the_confidences_are_low_and_the_chapter_admits_it() -> None:
+    values = sorted(float(scene["confidence"]) for scene in committed().scenes)
+    median = values[len(values) // 2]
+    assert round(median, 3) == 0.414
+    assert "0.414" in (ROOT / "docs" / "pipeline.md").read_text(encoding="utf-8")
+
+
+def test_the_loudest_scene_is_followed_by_its_opposite_and_both_are_agreed() -> None:
+    """The claim the chapter closes its results on, asserted rather than admired."""
+    scenes = {int(scene["scene"]): scene for scene in committed().scenes}
+    joy, fear = scenes[44], scenes[45]
+    assert (joy["emotion"], fear["emotion"]) == ("Joy", "Fear")
+    assert joy["agreed"] and fear["agreed"]
+    loudest = max(
+        (s for s in committed().scenes if s["emotion"] != "Neutral"),
+        key=lambda s: float(s["confidence"]),
+    )
+    assert int(loudest["scene"]) == 44
+
+
+def test_the_readme_quotes_the_record_it_was_built_from() -> None:
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    report = committed()
+    assert f"| Segments | {report.raw['segments']} |" in readme
+    assert f"| Scenes, at a 1s silence gap | {report.raw['scenes']} |" in readme
+    assert f"{report.agreement['scenes']} ({float(report.agreement['share']):.1%})" in readme
+    # The line that must never be dropped: this is not an accuracy.
+    assert "None of this is an accuracy" in readme
+
+
+def test_the_chapter_ends_by_saying_what_it_does_not_establish() -> None:
+    chapter = (ROOT / "docs" / "pipeline.md").read_text(encoding="utf-8")
+    assert "## What this does not establish" in chapter
+    assert "There are no labels on this recording" in chapter
+
+
 # --- the figure ---------------------------------------------------------------
 
 

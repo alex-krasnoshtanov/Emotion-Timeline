@@ -3,12 +3,13 @@
 **Turning a Russian-language video into a per-scene emotion timeline** — and the
 dataset, model selection and error analysis that had to happen first.
 
-![Three surface markers each take the error rate past 55%](assets/error-by-textual-feature.png)
+![47 scenes over 52 minutes; the two models agree on 49% of them](assets/emotion-timeline.png)
 
-An exclamation mark, a question mark or a shouted word each take this emotion
-classifier from roughly nine-in-ten right to worse than a coin flip. None of them
-is a semantic feature. That is the kind of thing you only find by looking at the
-6,454 failures rather than the 89.95% accuracy.
+A real 51-minute Russian documentary, 316 transcript segments grouped into 47
+scenes, each scored by two models trained on different languages. The band is
+solid where the two agree and hatched where they split, because with no labels on
+a documentary that is the only honest thing a timeline can tell you about which
+parts of itself to believe.
 
 [![CI](https://github.com/alex-krasnoshtanov/Emotion-Timeline/actions/workflows/ci.yml/badge.svg)](https://github.com/alex-krasnoshtanov/Emotion-Timeline/actions/workflows/ci.yml)
 [![Python 3.12 | 3.13](https://img.shields.io/badge/python-3.12%20%7C%203.13-blue.svg)](https://www.python.org/downloads/)
@@ -361,6 +362,52 @@ Full chapter: [`docs/russian.md`](docs/russian.md).
 
 ---
 
+## Result: the pipeline, on a real recording
+
+Three columns — `start_s`, `end_s`, text — are the whole interface. Above them,
+optional: yt-dlp, ffmpeg, Whisper. Below them, reproducible with no network at
+all, because the transcript is already committed for the speech-to-text chapter.
+
+```bash
+uv run emotion-timeline timeline        # reads only committed records
+```
+
+| | |
+| --- | ---: |
+| Segments | 316 |
+| Scenes, at a 1s silence gap | 47 |
+| Recording | 51.6 minutes |
+| Scenes the two models agree on | 23 (48.9%) |
+| Median calibrated confidence | 0.414 |
+
+**One model answers; the other is asked anyway.** No combination rule beat the
+native Russian model alone, so the timeline does not use one — the emotion is
+B's. The translation path still runs and its answer rides along, because the
+*agreement* between them was worth 0.5604 against 0.4816. That is a where-to-look
+signal rather than a better classifier, and it is drawn as one.
+
+**Two-thirds of a documentary is Neutral, which is the correct answer.** 32 of 47
+scenes are narration. The 15 that are not land where the episode turns: Fear at
+5.4 minutes when the investigator says the dead man was a known criminal, Joy at
+34.7 when the presenter crosses into Colombia, and at 49.5 the most confident
+non-Neutral scene in the episode — *"thank you for the courage"* — followed
+immediately at 49.9 by its opposite, *"such anxious feelings stay with you
+afterwards"*. Both models agree on both.
+
+**Three components became one parameter each.** PySceneDetect became a silence
+threshold, the separate intensity classifier became the calibration temperature
+already fitted in stage 6, and an unpinnable HTTP call to a local LLM became a
+300 MB translation model with greedy decoding.
+
+**None of this is an accuracy.** The recording has no labels and never will have.
+48.9% is a consistency figure between two models whose errors correlate, and the
+median confidence of 0.414 says the classifier is rarely sure on documentary
+speech — which is the honest reading, not a footnote.
+
+Full chapter: [`docs/pipeline.md`](docs/pipeline.md).
+
+---
+
 ## Result: where the classifier fails
 
 Accuracy of **89.95%** over 64,250 held-out samples, and the interesting part is
@@ -382,6 +429,15 @@ ambiguity looks like as opposed to a shortage of data.
 Confidence separates cleanly on average, 0.887 when right against 0.428 when
 wrong, but **625 errors are made confidently** — 9.7% of them, and precisely the
 ones a confidence threshold will never catch.
+
+### The markers that make it worse
+
+![Three surface markers each take the error rate past 55%](assets/error-by-textual-feature.png)
+
+An exclamation mark, a question mark or a shouted word each take this classifier
+from roughly nine-in-ten right to worse than a coin flip. None of them is a
+semantic feature, and all three
+[replicate on the retrained model](docs/fine-tune.md).
 
 ```bash
 uv run emotion-timeline errors
@@ -477,12 +533,18 @@ benchmarks/error-analysis/  the recorded statistics the figures render from
 benchmarks/dataset/      the recorded build: every row count, every class
 benchmarks/model-selection/  both surviving records of the nine-family benchmark
 benchmarks/model/        both surviving records of the trained classifier
+benchmarks/training/     the split manifest, the run, the held-out summary
+benchmarks/russian/      the Russian build, its split, and the four-way comparison
+benchmarks/pipeline/     the timeline over the committed transcript
 src/emotion_timeline/
   stt/                   the word error rate harness
   analysis/              error analysis over model predictions
   data/                  dataset construction from the public corpus
   selection/             the audit of the inherited model comparison
   model/                 the trained classifier's two records, audited
+  training/              the split, the fine-tune, the evaluation and its records
+  russian/               the four Russian approaches, and whether combining helps
+  pipeline/              scenes from silences, and the timeline over them
   figures.py             one palette, one staleness check, shared by every stage
 assets/                  figures, regenerated by `emotion-timeline figures`
 docs/                    one chapter per stage
@@ -493,7 +555,7 @@ tests/                   the arithmetic, and the mistakes worth pinning
 
 ## Scope
 
-Five stages are in. Each one commits the inputs it derives from, recomputes its
+Eight stages are in. Each one commits the inputs it derives from, recomputes its
 numbers from a command, and ends its chapter by saying what it does not establish.
 
 | Stage | Command | Chapter |
@@ -505,12 +567,13 @@ numbers from a command, and ends its chapter by saying what it does not establis
 | Where it fails | `errors` | [error-analysis.md](docs/error-analysis.md) |
 | A model that exists | `split`, `fine-tune`, `summarise`, `training` | [fine-tune.md](docs/fine-tune.md) |
 | Russian, translated or native | `russian`, `build-russian`, `compare-russian` | [russian.md](docs/russian.md) |
+| The timeline, on a real recording | `timeline`, `score-timeline` | [pipeline.md](docs/pipeline.md) |
 
-**Still open.** A per-scene timeline over the transcript this repository already
-commits, which is the thing the title promises and the one stage that would tie
-the others together in a picture — now with a measured answer about which model it
-should run. The nine families rerun on one feature pipeline and one held-out split
-is the other, and the only thing that would repair the ranking withdrawn above.
+**Still open.** The nine families rerun on one feature pipeline and one held-out
+split, which is the only thing that would repair the ranking withdrawn above. And
+a Russian emotion corpus that is not translated social-media text — the one
+experiment every number in the Russian chapter is waiting on, and the one that
+cannot be run, because 24,766 rows is what exists.
 
 **Deliberately absent.**
 
@@ -522,9 +585,15 @@ is the other, and the only thing that would repair the ranking withdrawn above.
   predictions survive to reproduce it from, and adding it would mean this study
   needs an API key. It currently needs none, and
   `test_no_committed_command_requires_a_credential` keeps it that way.
-- **No video-ingest pipeline.** The timeline runs over a committed, timestamped
-  transcript, so download, scene detection and audio preprocessing would buy a
-  reader nothing and cost several hundred megabytes of media.
+- **No visual scene detection.** The original found scene boundaries by looking
+  for cuts in the video. A silence threshold over the transcript needs no video
+  at analysis time, is one flag, and can be checked by eye. Keeping the seam at
+  three columns is worth more than the boundaries are.
+- **No audio-side emotion recognition.** The obvious next component, and it does
+  not survive the rule this repository runs on: every downloadable model
+  (`speechbrain/...IEMOCAP`, `ehcalabres/...RAVDESS`) is trained on small
+  corpora of *acted English*, with no Russian at all and nothing here to score it
+  against. It would be a component nobody could check.
 - **No Docker image and no docs site.**
   [Detection-by-Shadow](https://github.com/alex-krasnoshtanov/Detection-by-Shadow)
   carries the container and the browser demo;

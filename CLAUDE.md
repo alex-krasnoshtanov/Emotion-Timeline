@@ -90,6 +90,9 @@ src/emotion_timeline/
   data/               dataset construction from the public corpus
   selection/          the audit of the inherited model comparison
   model/              the trained classifier's two records, audited
+  training/           the split, the fine-tune, the evaluation and its records
+  russian/            the four Russian approaches, and whether combining helps
+  pipeline/           scenes from silences, and the timeline over them
   figures.py          palette, styling and the staleness stamp, shared
   cli.py              one subcommand per stage
 docs/                 one chapter per stage, each ending in what it does NOT show
@@ -112,6 +115,8 @@ uv run emotion-timeline dataset                   # what the training set is mad
 uv run emotion-timeline models                    # the nine-family benchmark, audited
 uv run emotion-timeline model                     # the trained classifier's two records
 uv run emotion-timeline errors                    # where the classifier fails
+uv run emotion-timeline russian                   # translate or classify natively
+uv run emotion-timeline timeline                  # the per-scene emotion timeline
 uv run emotion-timeline figures --out assets      # regenerate every figure, every stage
 
 uv sync --extra data && uv run emotion-timeline build-dataset   # rerun the build
