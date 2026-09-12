@@ -216,3 +216,55 @@ def describe(report: Comparison) -> Iterator[str]:
                 f"  {name}: {float(block['approximate_share']):.1%} of its top answers were a "
                 "class our label map could only approximate"
             )
+
+
+def build_record(
+    true: Sequence[str],
+    approaches: dict[str, dict[str, Any]],
+    pair: tuple[str, str] | None = None,
+) -> dict[str, Any]:
+    """The whole committed record, from each approach's calibrated probabilities.
+
+    ``approaches`` maps a name to ``{"what", "probabilities", ...}``; anything
+    else in the block -- a caveat, an approximate share -- is carried through
+    untouched so the reasons a number should be discounted travel with it.
+
+    ``pair`` names the two that can be combined. Only models answering in our
+    seven classes qualify, which is why it is passed rather than inferred.
+    """
+    record: dict[str, Any] = {
+        "_comment": [
+            "Four approaches to Russian emotion classification on one held-out",
+            "split of ru-izard-emotions, and three ways of combining the two that",
+            "answer in this project's seven classes. Written by",
+            "`emotion-timeline compare-russian`. Every approach is scored on the",
+            "same rows; where a number should be discounted, the reason is in the",
+            "block beside it rather than in the prose.",
+        ],
+        "held_out_rows": len(true),
+        "approaches": {},
+    }
+
+    for name, block in approaches.items():
+        probabilities = np.asarray(block["probabilities"])
+        predicted = [EMOTIONS[index] for index in probabilities.argmax(axis=1)]
+        measured = measure(true, predicted)
+        carried = {
+            key: value
+            for key, value in block.items()
+            if key not in {"probabilities", "validation_probabilities"}
+        }
+        record["approaches"][name] = {**carried, **measured}
+
+    if pair:
+        first, second = (np.asarray(approaches[name]["probabilities"]) for name in pair)
+        mask, shared = agreement_filter(first, second)
+        record["pair"] = list(pair)
+        record["combinations"] = {
+            "soft vote": measure(true, [EMOTIONS[i] for i in soft_vote(first, second)]),
+            "confidence pick": measure(true, [EMOTIONS[i] for i in confidence_pick(first, second)]),
+            "agreement filter": measure_filtered(
+                true, [EMOTIONS[i] for i in shared], mask.tolist()
+            ),
+        }
+    return record

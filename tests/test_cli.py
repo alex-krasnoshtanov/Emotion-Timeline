@@ -854,3 +854,35 @@ def test_build_russian_reports_a_build_that_drifted(
     monkeypatch.setattr(ru, "load_source", lambda *a, **k: other)
     assert cli.main(["build-russian", "--build-record", str(record)]) == 1
     assert "no longer reproduces" in capsys.readouterr().err
+
+
+def test_russian_prints_the_comparison_when_it_exists(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    assert cli.main(["russian"]) == 0
+    out = capsys.readouterr().out
+    assert "B native ruBERT" in out
+    assert "agreement filter" in out
+    assert "trained on the corpus" in out
+
+
+def test_russian_refuses_an_inconsistent_comparison(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from emotion_timeline.russian import compare
+
+    raw = json.loads(Path(compare.DEFAULT_COMPARISON).read_text(encoding="utf-8"))
+    raw["held_out_rows"] = 4
+    broken = tmp_path / "broken.json"
+    broken.write_text(json.dumps(raw), encoding="utf-8")
+
+    assert cli.main(["russian", "--comparison", str(broken)]) == 1
+    assert "inconsistent record" in capsys.readouterr().err
+
+
+def test_russian_is_happy_before_any_comparison_has_been_run(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The dataset stage stands on its own; the comparison is an addition to it."""
+    assert cli.main(["russian", "--comparison", str(tmp_path / "absent.json")]) == 0
+    assert "24,766 rows" in capsys.readouterr().out

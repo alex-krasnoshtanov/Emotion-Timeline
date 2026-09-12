@@ -1,0 +1,383 @@
+{
+  "_comment": [
+    "Four approaches to Russian emotion classification on one held-out",
+    "split of ru-izard-emotions, and three ways of combining the two that",
+    "answer in this project's seven classes. Written by",
+    "`emotion-timeline compare-russian`. Every approach is scored on the",
+    "same rows; where a number should be discounted, the reason is in the",
+    "block beside it rather than in the prose."
+  ],
+  "held_out_rows": 3715,
+  "approaches": {
+    "A translate, then ours": {
+      "what": "",
+      "model": "Helsinki-NLP/opus-mt-ru-en + models/distilbert-v1",
+      "temperature": 2.6193,
+      "samples": 3715,
+      "accuracy": 0.3631,
+      "macro_f1": 0.3276,
+      "weighted_f1": 0.3579,
+      "classes": {
+        "Anger": {
+          "support": 360,
+          "precision": 0.1757,
+          "recall": 0.1167,
+          "f1": 0.1402
+        },
+        "Disgust": {
+          "support": 407,
+          "precision": 0.2576,
+          "recall": 0.5381,
+          "f1": 0.3484
+        },
+        "Fear": {
+          "support": 285,
+          "precision": 0.4,
+          "recall": 0.393,
+          "f1": 0.3965
+        },
+        "Joy": {
+          "support": 687,
+          "precision": 0.4718,
+          "recall": 0.377,
+          "f1": 0.4191
+        },
+        "Neutral": {
+          "support": 1163,
+          "precision": 0.4187,
+          "recall": 0.4497,
+          "f1": 0.4337
+        },
+        "Sadness": {
+          "support": 568,
+          "precision": 0.3808,
+          "recall": 0.2447,
+          "f1": 0.298
+        },
+        "Surprise": {
+          "support": 245,
+          "precision": 0.3005,
+          "recall": 0.2245,
+          "f1": 0.257
+        }
+      }
+    },
+    "B native ruBERT": {
+      "what": "",
+      "model": "models/rubert-v1",
+      "temperature": 1.2353,
+      "samples": 3715,
+      "accuracy": 0.4816,
+      "macro_f1": 0.464,
+      "weighted_f1": 0.4768,
+      "classes": {
+        "Anger": {
+          "support": 360,
+          "precision": 0.2863,
+          "recall": 0.1917,
+          "f1": 0.2296
+        },
+        "Disgust": {
+          "support": 407,
+          "precision": 0.4171,
+          "recall": 0.3956,
+          "f1": 0.4061
+        },
+        "Fear": {
+          "support": 285,
+          "precision": 0.6679,
+          "recall": 0.6281,
+          "f1": 0.6474
+        },
+        "Joy": {
+          "support": 687,
+          "precision": 0.5396,
+          "recall": 0.5648,
+          "f1": 0.5519
+        },
+        "Neutral": {
+          "support": 1163,
+          "precision": 0.4858,
+          "recall": 0.546,
+          "f1": 0.5142
+        },
+        "Sadness": {
+          "support": 568,
+          "precision": 0.4279,
+          "recall": 0.4489,
+          "f1": 0.4381
+        },
+        "Surprise": {
+          "support": 245,
+          "precision": 0.5152,
+          "recall": 0.4163,
+          "f1": 0.4605
+        }
+      }
+    },
+    "C multilingual, off the shelf": {
+      "what": "",
+      "model": "tabularisai/multilingual-emotion-classification",
+      "approximate_share": 0.1995,
+      "samples": 3715,
+      "accuracy": 0.3157,
+      "macro_f1": 0.2826,
+      "weighted_f1": 0.3131,
+      "classes": {
+        "Anger": {
+          "support": 360,
+          "precision": 0.1674,
+          "recall": 0.2056,
+          "f1": 0.1845
+        },
+        "Disgust": {
+          "support": 407,
+          "precision": 0.2428,
+          "recall": 0.3317,
+          "f1": 0.2804
+        },
+        "Fear": {
+          "support": 285,
+          "precision": 0.2481,
+          "recall": 0.3368,
+          "f1": 0.2857
+        },
+        "Joy": {
+          "support": 687,
+          "precision": 0.3895,
+          "recall": 0.3333,
+          "f1": 0.3592
+        },
+        "Neutral": {
+          "support": 1163,
+          "precision": 0.3862,
+          "recall": 0.423,
+          "f1": 0.4038
+        },
+        "Sadness": {
+          "support": 568,
+          "precision": 0.3901,
+          "recall": 0.1532,
+          "f1": 0.22
+        },
+        "Surprise": {
+          "support": 245,
+          "precision": 0.2449,
+          "recall": 0.2449,
+          "f1": 0.2449
+        }
+      }
+    },
+    "D the one the pipeline shipped": {
+      "what": "",
+      "model": "Djacon/rubert-tiny2-russian-emotion-detection",
+      "approximate_share": 0.0,
+      "caveat": "reports ru-izard-emotions' own ten columns, so it was trained on the corpus this scores it against; its split is unknown and may overlap these rows",
+      "samples": 3715,
+      "accuracy": 0.4538,
+      "macro_f1": 0.3945,
+      "weighted_f1": 0.4233,
+      "classes": {
+        "Anger": {
+          "support": 360,
+          "precision": 0.218,
+          "recall": 0.4639,
+          "f1": 0.2966
+        },
+        "Disgust": {
+          "support": 407,
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0
+        },
+        "Fear": {
+          "support": 285,
+          "precision": 0.659,
+          "recall": 0.7053,
+          "f1": 0.6814
+        },
+        "Joy": {
+          "support": 687,
+          "precision": 0.4218,
+          "recall": 0.8719,
+          "f1": 0.5686
+        },
+        "Neutral": {
+          "support": 1163,
+          "precision": 0.6763,
+          "recall": 0.3629,
+          "f1": 0.4723
+        },
+        "Sadness": {
+          "support": 568,
+          "precision": 0.4874,
+          "recall": 0.4419,
+          "f1": 0.4635
+        },
+        "Surprise": {
+          "support": 245,
+          "precision": 0.5412,
+          "recall": 0.1878,
+          "f1": 0.2788
+        }
+      }
+    }
+  },
+  "pair": [
+    "A translate, then ours",
+    "B native ruBERT"
+  ],
+  "combinations": {
+    "soft vote": {
+      "samples": 3715,
+      "accuracy": 0.4799,
+      "macro_f1": 0.4596,
+      "weighted_f1": 0.4741,
+      "classes": {
+        "Anger": {
+          "support": 360,
+          "precision": 0.2888,
+          "recall": 0.15,
+          "f1": 0.1974
+        },
+        "Disgust": {
+          "support": 407,
+          "precision": 0.3515,
+          "recall": 0.5061,
+          "f1": 0.4149
+        },
+        "Fear": {
+          "support": 285,
+          "precision": 0.6679,
+          "recall": 0.6351,
+          "f1": 0.6511
+        },
+        "Joy": {
+          "support": 687,
+          "precision": 0.5552,
+          "recall": 0.5488,
+          "f1": 0.552
+        },
+        "Neutral": {
+          "support": 1163,
+          "precision": 0.4847,
+          "recall": 0.5443,
+          "f1": 0.5128
+        },
+        "Sadness": {
+          "support": 568,
+          "precision": 0.4632,
+          "recall": 0.4208,
+          "f1": 0.441
+        },
+        "Surprise": {
+          "support": 245,
+          "precision": 0.5471,
+          "recall": 0.3796,
+          "f1": 0.4482
+        }
+      }
+    },
+    "confidence pick": {
+      "samples": 3715,
+      "accuracy": 0.4781,
+      "macro_f1": 0.454,
+      "weighted_f1": 0.4705,
+      "classes": {
+        "Anger": {
+          "support": 360,
+          "precision": 0.2767,
+          "recall": 0.1222,
+          "f1": 0.1696
+        },
+        "Disgust": {
+          "support": 407,
+          "precision": 0.3413,
+          "recall": 0.4939,
+          "f1": 0.4036
+        },
+        "Fear": {
+          "support": 285,
+          "precision": 0.6486,
+          "recall": 0.6281,
+          "f1": 0.6381
+        },
+        "Joy": {
+          "support": 687,
+          "precision": 0.5402,
+          "recall": 0.5764,
+          "f1": 0.5577
+        },
+        "Neutral": {
+          "support": 1163,
+          "precision": 0.4924,
+          "recall": 0.5288,
+          "f1": 0.51
+        },
+        "Sadness": {
+          "support": 568,
+          "precision": 0.4648,
+          "recall": 0.4296,
+          "f1": 0.4465
+        },
+        "Surprise": {
+          "support": 245,
+          "precision": 0.5272,
+          "recall": 0.3959,
+          "f1": 0.4522
+        }
+      }
+    },
+    "agreement filter": {
+      "samples": 1622,
+      "accuracy": 0.5604,
+      "macro_f1": 0.5112,
+      "weighted_f1": 0.549,
+      "classes": {
+        "Anger": {
+          "support": 122,
+          "precision": 0.2444,
+          "recall": 0.0902,
+          "f1": 0.1317
+        },
+        "Disgust": {
+          "support": 189,
+          "precision": 0.4803,
+          "recall": 0.6455,
+          "f1": 0.5508
+        },
+        "Fear": {
+          "support": 152,
+          "precision": 0.8016,
+          "recall": 0.6645,
+          "f1": 0.7266
+        },
+        "Joy": {
+          "support": 345,
+          "precision": 0.6623,
+          "recall": 0.5797,
+          "f1": 0.6182
+        },
+        "Neutral": {
+          "support": 490,
+          "precision": 0.5168,
+          "recall": 0.6898,
+          "f1": 0.5909
+        },
+        "Sadness": {
+          "support": 223,
+          "precision": 0.55,
+          "recall": 0.4439,
+          "f1": 0.4913
+        },
+        "Surprise": {
+          "support": 101,
+          "precision": 0.623,
+          "recall": 0.3762,
+          "f1": 0.4691
+        }
+      },
+      "coverage": 0.4366
+    }
+  }
+}

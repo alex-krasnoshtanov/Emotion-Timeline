@@ -610,6 +610,130 @@ def cmd_russian(args: argparse.Namespace) -> int:
     else:
         print(f"  enthusiasm dropped, taking {enthusiasm['rows_moved']:,} rows with it")
     print(f"  {', '.join(report.raw['dropped_columns'])} dropped: no seven-class equivalent")
+
+    comparison = Path(args.comparison)
+    if not comparison.exists():
+        return 0
+
+    from emotion_timeline.russian import compare
+
+    scored = compare.Comparison.load(comparison)
+    problems = compare.check_consistency(scored)
+    for problem in problems:
+        print(f"inconsistent record: {problem}", file=sys.stderr)
+    if problems:
+        return 1
+    print()
+    for line in compare.describe(scored):
+        print(line)
+    return 0
+
+
+def _russian_splits(dataset: str, manifest_path: str) -> dict[str, Any]:
+    """The Russian set sliced into the committed splits, as plain lists."""
+    from emotion_timeline.training import splits
+
+    manifest = splits.SplitManifest.load(manifest_path)
+    frame = _read_frame(dataset)
+    texts = [str(v) for v in frame["text"]]
+    labels = [str(v) for v in frame["label"]]
+    keys = splits.row_keys(texts, labels, [str(v) for v in frame["source"]], seed=manifest.seed)
+    assignment = splits.assign(keys, labels, manifest.fraction)
+    out: dict[str, Any] = {}
+    for name in (splits.VALIDATION, splits.TEST):
+        chosen = [index for index, split in enumerate(assignment) if split == name]
+        out[name] = {
+            "texts": [texts[index] for index in chosen],
+            "labels": [labels[index] for index in chosen],
+        }
+    return out
+
+
+def cmd_compare_russian(args: argparse.Namespace) -> int:  # pragma: no cover - runs four models
+    """Score every approach to Russian on the one held-out split."""
+    import numpy as np
+
+    from emotion_timeline.data import ru
+    from emotion_timeline.data.labels import EMOTIONS
+    from emotion_timeline.russian import baselines, compare, maps, translate
+    from emotion_timeline.training import evaluate, run, splits
+
+    parts = _russian_splits(args.dataset, args.manifest)
+    validation, test = parts[splits.VALIDATION], parts[splits.TEST]
+    true = test["labels"]
+    print(f"{len(true):,} held-out Russian rows, {len(validation['labels']):,} for calibration")
+
+    approaches: dict[str, Any] = {}
+
+    print(f"A: translating with {translate.MODEL}")
+    english = {
+        name: translate.translate(part["texts"], progress=print)
+        for name, part in (("validation", validation), ("test", test))
+    }
+    a_validation, _ = baselines.predict(args.weights, english["validation"], multi_label=False)
+    a_test, _ = baselines.predict(args.weights, english["test"], multi_label=False)
+
+    print(f"B: {args.rubert}")
+    b_archive = np.load(args.rubert_predictions)
+    b_validation = evaluate.softmax(b_archive["validation_logits"])
+    b_test = evaluate.softmax(b_archive["test_logits"])
+
+    # Each is scaled by its own temperature, fitted on its own validation rows.
+    # Averaging raw probabilities would measure which model is more strident.
+    index = {name: position for position, name in enumerate(EMOTIONS)}
+    truth = np.array([index[label] for label in validation["labels"]], dtype=np.int64)
+    temperatures = {
+        "A": evaluate.fit_temperature(np.log(np.clip(a_validation, 1e-12, None)), truth),
+        "B": evaluate.fit_temperature(np.log(np.clip(b_validation, 1e-12, None)), truth),
+    }
+    print(f"  temperatures: A {temperatures['A']:.3f}, B {temperatures['B']:.3f}")
+
+    approaches["A translate, then ours"] = {
+        "what": "",
+        "model": f"{translate.MODEL} + {args.weights}",
+        "temperature": round(temperatures["A"], 4),
+        "probabilities": evaluate.softmax(np.log(np.clip(a_test, 1e-12, None)), temperatures["A"]),
+    }
+    approaches["B native ruBERT"] = {
+        "what": "",
+        "model": args.rubert,
+        "temperature": round(temperatures["B"], 4),
+        "probabilities": evaluate.softmax(np.log(np.clip(b_test, 1e-12, None)), temperatures["B"]),
+    }
+
+    for key, model_id, mapping, approximate in (
+        ("C multilingual, off the shelf", args.multilingual, maps.MULTILINGUAL, maps.APPROXIMATE),
+        ("D the one the pipeline shipped", args.incumbent, None, frozenset()),
+    ):
+        print(f"{key.split()[0]}: {model_id}")
+        probabilities, labels = baselines.predict(model_id, test["texts"])
+        # Djacon reports ru-izard's own columns, so ru.to_seven already maps them.
+        if mapping is None:
+            native = {column: ru.to_seven([column]) for column in labels}
+            mapping = {column: target for column, target in native.items() if target is not None}
+        folded = mapping
+        scored = baselines.score(probabilities, labels, folded, approximate)
+        approaches[key] = {
+            "what": "",
+            "model": model_id,
+            "probabilities": scored["probabilities"],
+            "approximate_share": scored["approximate_share"],
+            **(
+                {"caveat": maps.TRAINED_ON_THE_TEST_SET[model_id]}
+                if model_id in maps.TRAINED_ON_THE_TEST_SET
+                else {}
+            ),
+        }
+
+    record = compare.build_record(
+        true, approaches, pair=("A translate, then ours", "B native ruBERT")
+    )
+    written = run.write_record(record, args.out)
+    print()
+    for line in compare.describe(compare.Comparison.load(written)):
+        print(line)
+    print()
+    print(f"wrote {written}")
     return 0
 
 
@@ -909,7 +1033,39 @@ def build_parser() -> argparse.ArgumentParser:
         help="the Russian evaluation set, and what mapping it to seven classes cost",
     )
     russian_parser.add_argument("--build-record", default=str(RU_RECORD))
+    russian_parser.add_argument(
+        "--comparison", default=str(BENCHMARKS / "russian" / "comparison.json")
+    )
     russian_parser.set_defaults(func=cmd_russian)
+
+    compare_russian_parser = sub.add_parser(
+        "compare-russian",
+        help="score every approach to Russian on the held-out split (needs --extra model)",
+        description=(
+            "Runs the translator, our model, a native ruBERT and two off-the-shelf "
+            "classifiers over the same rows, calibrates the two that answer in our "
+            "seven classes, and writes the comparison."
+        ),
+    )
+    compare_russian_parser.add_argument("--dataset", default="data/russian.csv")
+    compare_russian_parser.add_argument(
+        "--manifest", default=str(BENCHMARKS / "russian" / "split-manifest.json")
+    )
+    compare_russian_parser.add_argument("--weights", default="models/distilbert-v1")
+    compare_russian_parser.add_argument("--rubert", default="models/rubert-v1")
+    compare_russian_parser.add_argument(
+        "--rubert-predictions", default="models/predictions-rubert.npz"
+    )
+    compare_russian_parser.add_argument(
+        "--multilingual", default="tabularisai/multilingual-emotion-classification"
+    )
+    compare_russian_parser.add_argument(
+        "--incumbent", default="Djacon/rubert-tiny2-russian-emotion-detection"
+    )
+    compare_russian_parser.add_argument(
+        "--out", default=str(BENCHMARKS / "russian" / "comparison.json")
+    )
+    compare_russian_parser.set_defaults(func=cmd_compare_russian)
 
     errors_parser = sub.add_parser(
         "errors",

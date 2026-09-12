@@ -1,0 +1,46 @@
+{
+  "_comment": [
+    "One fine-tune of the classifier on the rebuilt dataset.",
+    "Written by `emotion-timeline fine-tune`. The weights themselves ship",
+    "as a release asset with the digest recorded below; this file is the",
+    "part small enough to read in a diff. Scores live beside it in",
+    "held-out-summary.json, which `emotion-timeline training` checks."
+  ],
+  "config": {
+    "model_id": "DeepPavlov/rubert-base-cased",
+    "epochs": 2,
+    "batch_size": 32,
+    "learning_rate": 5e-05,
+    "max_length": 128,
+    "weight_decay": 0.01,
+    "warmup_fraction": 0.06,
+    "seed": 20251115,
+    "weighted_loss": false,
+    "classes": [
+      "Anger",
+      "Disgust",
+      "Fear",
+      "Joy",
+      "Neutral",
+      "Sadness",
+      "Surprise"
+    ]
+  },
+  "split_manifest_sha256": "3ed9a11dcbdb6a96fc04fbe72833b36bf285830afe91c4c7cc2dac9d4eff39f7",
+  "device": "NVIDIA GeForce RTX 5070",
+  "python": "3.13.11",
+  "seconds": 149.6,
+  "peak_mib": 3625,
+  "epochs": [
+    {
+      "epoch": 1.0,
+      "train_loss": 1.5122296927874133,
+      "val_accuracy": 0.4985195154777927
+    },
+    {
+      "epoch": 2.0,
+      "train_loss": 1.1572802056625904,
+      "val_accuracy": 0.5082099596231494
+    }
+  ]
+}

@@ -7,6 +7,9 @@ from the forward pass that produces the numbers they combine.
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 import numpy as np
 import pytest
 
@@ -186,3 +189,210 @@ def test_measure_is_the_same_arithmetic_the_other_stages_use() -> None:
     assert result["samples"] == 4
     assert result["accuracy"] == 0.75
     assert sum(entry["support"] for entry in result["classes"].values()) == 4
+
+
+# --- the record ---------------------------------------------------------------
+
+
+def four_rows() -> tuple[list[str], dict[str, dict[str, object]]]:
+    """Two approaches over four rows, agreeing on half of them."""
+    true = ["Anger", "Disgust", "Anger", "Fear"]
+    first, second = two_models()
+    wide = np.zeros((4, 7))
+    wide[:, [EMOTIONS.index(name) for name in THREE]] = first
+    other = np.zeros((4, 7))
+    other[:, [EMOTIONS.index(name) for name in THREE]] = second
+    return true, {
+        "A": {"what": "translate", "probabilities": wide, "temperature": 1.2},
+        "B": {"what": "native", "probabilities": other, "caveat": "only a test"},
+    }
+
+
+def test_the_record_scores_every_approach_on_the_same_rows() -> None:
+    true, approaches = four_rows()
+    record = compare.build_record(true, approaches)
+    assert record["held_out_rows"] == 4
+    assert set(record["approaches"]) == {"A", "B"}
+    assert all(block["samples"] == 4 for block in record["approaches"].values())
+
+
+def test_the_reasons_to_discount_a_number_travel_with_it() -> None:
+    """A caveat in prose gets read second; one in the block cannot be separated."""
+    true, approaches = four_rows()
+    record = compare.build_record(true, approaches)
+    assert record["approaches"]["B"]["caveat"] == "only a test"
+    assert record["approaches"]["A"]["temperature"] == 1.2
+
+
+def test_the_probabilities_themselves_are_not_committed() -> None:
+    true, approaches = four_rows()
+    record = compare.build_record(true, approaches)
+    assert "probabilities" not in record["approaches"]["A"]
+
+
+def test_the_three_combinations_land_only_when_a_pair_is_named() -> None:
+    true, approaches = four_rows()
+    assert "combinations" not in compare.build_record(true, approaches)
+    record = compare.build_record(true, approaches, pair=("A", "B"))
+    assert set(record["combinations"]) == {"soft vote", "confidence pick", "agreement filter"}
+    assert record["pair"] == ["A", "B"]
+
+
+def test_only_the_agreement_filter_reports_coverage() -> None:
+    true, approaches = four_rows()
+    combinations = compare.build_record(true, approaches, pair=("A", "B"))["combinations"]
+    assert combinations["agreement filter"]["coverage"] == 0.5
+    assert "coverage" not in combinations["soft vote"]
+    assert combinations["soft vote"]["samples"] == 4
+
+
+def written(tmp_path: Path, record: dict[str, object]) -> compare.Comparison:
+    path = tmp_path / "comparison.json"
+    path.write_text(json.dumps(record), encoding="utf-8")
+    return compare.Comparison.load(path)
+
+
+def test_a_record_built_here_passes_its_own_checks(tmp_path: Path) -> None:
+    true, approaches = four_rows()
+    report = written(tmp_path, compare.build_record(true, approaches, pair=("A", "B")))
+    assert compare.check_consistency(report) == []
+    assert report.samples == 4
+
+
+def test_the_best_row_is_the_one_with_the_highest_accuracy(tmp_path: Path) -> None:
+    true, approaches = four_rows()
+    report = written(tmp_path, compare.build_record(true, approaches, pair=("A", "B")))
+    name, accuracy = report.best()
+    everything = {**report.approaches, **report.combinations}
+    assert accuracy == max(float(block["accuracy"]) for block in everything.values())
+    assert name in everything
+
+
+def test_describe_names_every_approach_and_its_caveat(tmp_path: Path) -> None:
+    true, approaches = four_rows()
+    report = written(tmp_path, compare.build_record(true, approaches, pair=("A", "B")))
+    lines = list(compare.describe(report))
+    assert any("4 held-out Russian rows" in line for line in lines)
+    assert any("agreement filter" in line for line in lines)
+    assert any("only a test" in line for line in lines)
+
+
+def test_an_accuracy_that_is_not_a_share_is_caught(tmp_path: Path) -> None:
+    true, approaches = four_rows()
+    record = compare.build_record(true, approaches)
+    record["approaches"]["A"]["accuracy"] = 1.5
+    problems = compare.check_consistency(written(tmp_path, record))
+    assert any("not a share" in problem for problem in problems)
+
+
+def test_supports_that_do_not_sum_to_the_header_are_caught(tmp_path: Path) -> None:
+    true, approaches = four_rows()
+    record = compare.build_record(true, approaches)
+    record["approaches"]["A"]["classes"]["Anger"]["support"] = 99
+    problems = compare.check_consistency(written(tmp_path, record))
+    assert any("supports sum to" in problem for problem in problems)
+
+
+def test_an_f1_that_is_not_the_harmonic_mean_is_caught(tmp_path: Path) -> None:
+    true, approaches = four_rows()
+    record = compare.build_record(true, approaches)
+    record["approaches"]["A"]["classes"]["Anger"]["f1"] = 0.999
+    problems = compare.check_consistency(written(tmp_path, record))
+    assert any("harmonic mean" in problem for problem in problems)
+
+
+def test_an_approach_scored_on_the_wrong_rows_is_caught(tmp_path: Path) -> None:
+    true, approaches = four_rows()
+    record = compare.build_record(true, approaches)
+    record["held_out_rows"] = 9
+    problems = compare.check_consistency(written(tmp_path, record))
+    assert any("the set holds 9" in problem for problem in problems)
+
+
+def test_a_full_coverage_rule_that_answers_fewer_rows_is_caught(tmp_path: Path) -> None:
+    """A rule with no coverage figure has to have answered everything."""
+    true, approaches = four_rows()
+    record = compare.build_record(true, approaches, pair=("A", "B"))
+    record["combinations"]["soft vote"]["samples"] = 2
+    problems = compare.check_consistency(written(tmp_path, record))
+    assert any("reports no coverage" in problem for problem in problems)
+
+
+def test_a_coverage_that_is_not_a_share_is_caught(tmp_path: Path) -> None:
+    true, approaches = four_rows()
+    record = compare.build_record(true, approaches, pair=("A", "B"))
+    record["combinations"]["agreement filter"]["coverage"] = 4.0
+    problems = compare.check_consistency(written(tmp_path, record))
+    assert any("coverage 4.0 is not a share" in problem for problem in problems)
+
+
+# --- the committed comparison -------------------------------------------------
+
+
+def committed() -> compare.Comparison:
+    return compare.Comparison.load()
+
+
+def test_the_committed_comparison_is_consistent() -> None:
+    assert compare.check_consistency(committed()) == []
+
+
+def test_every_approach_was_scored_on_the_same_rows() -> None:
+    report = committed()
+    assert report.samples == 3_715
+    assert all(block["samples"] == 3_715 for block in report.approaches.values())
+
+
+def test_classifying_russian_directly_beats_translating_it() -> None:
+    """The question the original decided by judgement, answered by measurement."""
+    approaches = committed().approaches
+    native = float(approaches["B native ruBERT"]["accuracy"])
+    translated = float(approaches["A translate, then ours"]["accuracy"])
+    assert native == pytest.approx(0.4816, abs=5e-4)
+    assert translated == pytest.approx(0.3631, abs=5e-4)
+    assert native > translated + 0.1
+
+
+def test_our_native_model_beats_the_one_the_pipeline_shipped() -> None:
+    """And beats it despite the incumbent having trained on this very corpus."""
+    approaches = committed().approaches
+    assert float(approaches["B native ruBERT"]["accuracy"]) > float(
+        approaches["D the one the pipeline shipped"]["accuracy"]
+    )
+
+
+def test_combining_them_does_not_raise_accuracy_at_full_coverage() -> None:
+    """The negative result, pinned so nobody quietly claims the opposite.
+
+    A soft vote and a confidence pick both land *below* the stronger model alone:
+    averaging a 0.36 model into a 0.48 one drags it down. The ensemble intuition
+    does not survive two models this unequal.
+    """
+    report = committed()
+    best_alone = float(report.approaches["B native ruBERT"]["accuracy"])
+    for rule in ("soft vote", "confidence pick"):
+        assert float(report.combinations[rule]["accuracy"]) < best_alone
+
+
+def test_the_agreement_filter_buys_accuracy_and_pays_in_coverage() -> None:
+    """Where they agree the answer is much better -- on 44% of the rows."""
+    agreement = committed().combinations["agreement filter"]
+    assert float(agreement["accuracy"]) == pytest.approx(0.5604, abs=5e-4)
+    assert float(agreement["coverage"]) == pytest.approx(0.437, abs=5e-3)
+    assert float(agreement["accuracy"]) > 0.48
+
+
+def test_no_accuracy_is_published_without_the_coverage_it_was_measured_over() -> None:
+    """The 240-row word error rate, prevented rather than repeated."""
+    for name, block in committed().combinations.items():
+        assert "coverage" in block or block["samples"] == 3_715, name
+
+
+def test_the_incumbent_carries_its_caveat_into_the_record() -> None:
+    caveat = committed().approaches["D the one the pipeline shipped"]["caveat"]
+    assert "trained on the corpus" in caveat
+
+
+def test_the_russian_numbers_are_far_below_the_english_one() -> None:
+    """0.48 against 0.9164, which nobody should read as a translation problem alone."""
+    assert float(committed().approaches["B native ruBERT"]["accuracy"]) < 0.6

@@ -92,8 +92,12 @@ def to_seven(active: list[str], drop_enthusiasm: bool = False) -> str | None:
                 continue
             names.append(MERGED_INTO[column])
         else:
-            names.append(column.capitalize())
-    return collapse(sorted(set(names), key=lambda name: EMOTIONS.index(name)))
+            candidate = column.capitalize()
+            # A vocabulary we do not recognise contributes nothing rather than
+            # raising: this maps other people's label sets as well as ru-izard's.
+            if candidate in EMOTIONS:
+                names.append(candidate)
+    return collapse(sorted(set(names), key=EMOTIONS.index))
 
 
 def load_source(
