@@ -140,7 +140,7 @@ pretty = true
 module = [
     "accelerate.*",
     "datasets.*",
-    "scipy.optimize.*",
+    "scipy.*",
     "sklearn.*",
     "torch.*",
     "transformers.*",

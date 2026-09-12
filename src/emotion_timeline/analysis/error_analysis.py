@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -170,6 +171,27 @@ def _style(ax: Any) -> None:
     figures.style(ax)
 
 
+#: The error rate a marker has to reach before the title counts it. Past this a
+#: marker has taken the model from roughly nine-in-ten right to worse than a coin
+#: flip, which is the finding worth a headline.
+STARK = 55.0
+
+
+def marker_headline(rates: Sequence[float], threshold: float = STARK) -> str:
+    """The figure's title, counted from the data rather than written into it.
+
+    It said "Three surface markers each take the error rate past 55%" as a string.
+    That was true of the report it was written for and would have gone on being
+    drawn over any other -- which is the mistake this repository spends five
+    chapters documenting in other people's work.
+    """
+    past = sum(1 for rate in rates if rate > threshold)
+    spelled = {0: "No", 1: "One", 2: "Two", 3: "Three", 4: "Four", 5: "Five"}
+    counted = spelled.get(past, str(past))
+    verb = "marker takes" if past == 1 else "markers each take"
+    return f"{counted} surface {verb} the error rate past {threshold:.0f}%"
+
+
 def figure_textual_features(report: ErrorReport, path: Path) -> Path:
     """The finding worth leading with: punctuation predicts failure."""
     import matplotlib
@@ -192,10 +214,10 @@ def figure_textual_features(report: ErrorReport, path: Path) -> Path:
         ax.text(a + 1, i - 0.19, f"{a:.1f}%", va="center", fontsize=9, color=RIGHT)
     ax.set_yticks(list(y))
     ax.set_yticklabels(labels)
-    ax.set_xlim(0, max(present) * 1.18)
+    ax.set_xlim(0, max(present, default=1.0) * 1.18)
     ax.set_xlabel("error rate (%)", color=MUTED, fontsize=9)
     ax.set_title(
-        "Three surface markers each take the error rate past 55%",
+        marker_headline(present),
         color=INK,
         fontsize=12,
         weight="bold",

@@ -157,3 +157,25 @@ def test_a_file_that_is_not_a_png_has_no_stamp(tmp_path: Path) -> None:
     path = tmp_path / "not-an-image.png"
     path.write_bytes(b"this is not a PNG")
     assert ea.read_stamp(path) is None
+
+
+def test_the_marker_headline_counts_rather_than_asserts() -> None:
+    """It used to be a string, and would have been drawn over any other report."""
+    assert ea.marker_headline([56.8, 56.6, 55.8, 14.3]) == (
+        "Three surface markers each take the error rate past 55%"
+    )
+    assert ea.marker_headline([60.0]) == "One surface marker takes the error rate past 55%"
+    assert (
+        ea.marker_headline([10.0, 20.0]) == "No surface markers each take the error rate past 55%"
+    )
+    assert ea.marker_headline([]) == "No surface markers each take the error rate past 55%"
+
+
+def test_the_committed_report_still_says_three() -> None:
+    report = ea.ErrorReport.load()
+    rates = [
+        block["error_rate_present"] * 100
+        for name, block in report.textual_features.items()
+        if name != "_comment" and block["present_samples"] >= 100
+    ]
+    assert ea.marker_headline(rates) == "Three surface markers each take the error rate past 55%"
