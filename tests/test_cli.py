@@ -405,3 +405,69 @@ def test_split_rejects_a_csv_missing_a_column(tmp_path: Path) -> None:
     dataset.write_text("text,label\nhello,a\n", encoding="utf-8")
     with pytest.raises(SystemExit, match="source"):
         cli.main(["split", "--verify", str(dataset)])
+
+
+# --- preflight ---------------------------------------------------------------
+
+
+def fake_device() -> object:
+    from emotion_timeline.training import preflight
+
+    return preflight.Device(
+        name="NVIDIA GeForce RTX 5070",
+        capability=(12, 0),
+        total_mib=12_227,
+        free_mib=11_000,
+        torch_version="2.11.0+cu128",
+        cuda_version="12.8",
+        arch_list=("sm_90", "sm_120"),
+    )
+
+
+def test_preflight_reports_a_card_it_can_train_on(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from emotion_timeline.training import preflight
+
+    monkeypatch.setattr(preflight, "probe", fake_device)
+    monkeypatch.setattr(preflight, "smoke", lambda: None)
+    assert cli.main(["preflight"]) == 0
+    out = capsys.readouterr().out
+    assert "RTX 5070" in out
+    assert "sm_120" in out
+    assert "ready to train" in out
+
+
+def test_preflight_fails_with_the_fix_when_torch_is_missing(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from emotion_timeline.training import preflight
+
+    monkeypatch.setattr(preflight, "probe", lambda: None)
+    monkeypatch.setattr(preflight, "smoke", lambda: None)
+    assert cli.main(["preflight"]) == 1
+    err = capsys.readouterr().err
+    assert "cannot train here" in err
+    assert "--extra model" in err
+
+
+def test_preflight_fails_when_the_multiply_fails(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from emotion_timeline.training import preflight
+
+    monkeypatch.setattr(preflight, "probe", fake_device)
+    monkeypatch.setattr(preflight, "smoke", lambda: "no kernel image is available")
+    assert cli.main(["preflight"]) == 1
+    assert "matrix multiply on the device failed" in capsys.readouterr().err
+
+
+def test_preflight_takes_the_memory_a_smaller_run_needs(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from emotion_timeline.training import preflight
+
+    monkeypatch.setattr(preflight, "probe", fake_device)
+    monkeypatch.setattr(preflight, "smoke", lambda: None)
+    assert cli.main(["preflight", "--need-mib", "99999"]) == 1
+    assert "11,000 MiB free" in capsys.readouterr().err

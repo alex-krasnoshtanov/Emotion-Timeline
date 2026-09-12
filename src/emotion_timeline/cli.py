@@ -303,6 +303,25 @@ def _read_dataset(path: str) -> tuple[list[str], list[str], list[str]]:
     )
 
 
+def cmd_preflight(args: argparse.Namespace) -> int:
+    """Whether this machine can train, and what to fix if it cannot."""
+    from emotion_timeline.training import preflight
+
+    device = preflight.probe()
+    if device is not None:
+        for line in preflight.describe(device):
+            print(line)
+        print()
+
+    problems = preflight.assess(device, preflight.smoke(), args.need_mib)
+    for problem in problems:
+        print(f"cannot train here: {problem}", file=sys.stderr)
+    if problems:
+        return 1
+    print("ready to train")
+    return 0
+
+
 def cmd_split(args: argparse.Namespace) -> int:
     """The committed split: what it holds, and whether a rebuilt dataset still gives it."""
     from emotion_timeline.training import splits
@@ -502,6 +521,23 @@ def build_parser() -> argparse.ArgumentParser:
     )
     build_dataset_parser.add_argument("--cache", help="dataset download cache directory")
     build_dataset_parser.set_defaults(func=cmd_build_dataset)
+
+    preflight_parser = sub.add_parser(
+        "preflight",
+        help="check the GPU can actually run a kernel before training on it",
+        description=(
+            "Reports the card, the torch build and the architectures it carries "
+            "kernels for, then runs one real matrix multiply. Both ways this goes "
+            "wrong are quiet, so it is worth a second before an hour of training."
+        ),
+    )
+    preflight_parser.add_argument(
+        "--need-mib",
+        type=int,
+        default=6000,
+        help="free video memory the run needs (default: enough for batch 64 at length 128)",
+    )
+    preflight_parser.set_defaults(func=cmd_preflight)
 
     split_parser = sub.add_parser(
         "split",
