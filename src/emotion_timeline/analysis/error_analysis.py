@@ -143,9 +143,16 @@ def check_consistency(report: ErrorReport) -> list[str]:
                 f"{c.name}: listed confusions ({listed}) exceed its errors ({c.errors})"
             )
 
-    share = report.confidence["high_confidence_errors"] / report.total_errors
-    if abs(share - report.confidence["high_confidence_error_share_of_errors"]) > 5e-4:
-        problems.append(f"high-confidence error share does not match: implied {share:.4f}")
+    confident = report.confidence["high_confidence_errors"]
+    if report.total_errors:
+        share = confident / report.total_errors
+        if abs(share - report.confidence["high_confidence_error_share_of_errors"]) > 5e-4:
+            problems.append(f"high-confidence error share does not match: implied {share:.4f}")
+    elif confident:
+        # A report with no errors is unusual rather than impossible -- a small
+        # enough evaluation set can be got entirely right -- but it cannot then
+        # have confident ones.
+        problems.append(f"no errors recorded, but {confident} are called high-confidence")
 
     return problems
 

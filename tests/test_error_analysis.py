@@ -179,3 +179,25 @@ def test_the_committed_report_still_says_three() -> None:
         if name != "_comment" and block["present_samples"] >= 100
     ]
     assert ea.marker_headline(rates) == "Three surface markers each take the error rate past 55%"
+
+
+def test_a_report_with_no_errors_is_checked_rather_than_crashing(tmp_path: Path) -> None:
+    """A small enough evaluation set can be got entirely right; the check divided by it."""
+    raw = json.loads(Path(ea.DEFAULT_REPORT).read_text(encoding="utf-8"))
+    raw["total_errors"] = 0
+    raw["error_rate"] = 0.0
+    raw["accuracy"] = 1.0
+    for block in raw["classes"].values():
+        block["errors"] = 0
+        block["error_rate"] = 0.0
+        block["confused_with"] = {}
+    raw["confidence"]["high_confidence_errors"] = 0
+    raw["confidence"]["high_confidence_error_share_of_errors"] = 0.0
+    path = tmp_path / "perfect.json"
+    path.write_text(json.dumps(raw), encoding="utf-8")
+    assert ea.check_consistency(ea.ErrorReport.load(path)) == []
+
+    raw["confidence"]["high_confidence_errors"] = 3
+    path.write_text(json.dumps(raw), encoding="utf-8")
+    problems = ea.check_consistency(ea.ErrorReport.load(path))
+    assert any("no errors recorded" in problem for problem in problems)

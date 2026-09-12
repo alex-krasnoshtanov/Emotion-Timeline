@@ -205,3 +205,93 @@ def held_out_summary(
         "vocabulary": vocabulary_bias(texts, correct),
         "confidence": confidence_block(confidence, correct),
     }
+
+
+def decode(
+    logits: np.ndarray,
+    classes: Sequence[str],
+    temperature: float = 1.0,
+) -> tuple[list[str], list[float]]:
+    """The class each row was given, and how sure the model was about it."""
+    from emotion_timeline.training.evaluate import softmax
+
+    probabilities = softmax(np.asarray(logits), temperature)
+    chosen = probabilities.argmax(axis=1)
+    return (
+        [classes[position] for position in chosen],
+        [float(row[position]) for row, position in zip(probabilities, chosen, strict=True)],
+    )
+
+
+def calibration_report(
+    validation_logits: np.ndarray,
+    validation_true: np.ndarray,
+    test_logits: np.ndarray,
+    test_true: np.ndarray,
+    bins: int = 20,
+) -> dict[str, Any]:
+    """What one scalar fitted on validation does to the held-out set.
+
+    `docs/error-analysis.md` asks for calibration rather than a threshold, and the
+    card's own advice to trust anything above 0.7 rests on a gap it measured in
+    domain and nowhere else. Fitting on validation and reporting on test is the
+    only honest order: a temperature fitted on the set it is scored over would
+    flatter itself.
+    """
+    from emotion_timeline.training import evaluate
+
+    temperature = evaluate.fit_temperature(validation_logits, validation_true)
+
+    measured: dict[str, Any] = {}
+    for name, value in (("before", 1.0), ("after", temperature)):
+        probabilities = evaluate.softmax(test_logits, value)
+        chosen = probabilities.argmax(axis=1)
+        correct = [bool(a == b) for a, b in zip(chosen, test_true, strict=True)]
+        confidence = [
+            float(row[position]) for row, position in zip(probabilities, chosen, strict=True)
+        ]
+        bucket = evaluate.calibration(confidence, correct, bins)
+        measured[name] = {
+            "expected_calibration_error": round(evaluate.expected_calibration_error(bucket), 4),
+            **{
+                key: round(value_, 4)
+                for key, value_ in evaluate.confidence_gap(confidence, correct).items()
+            },
+        }
+
+    return {
+        "_comment": (
+            "One scalar fitted on the validation split by minimising its negative "
+            "log likelihood, then applied to the held-out set. Accuracy cannot "
+            "change -- temperature does not reorder the classes -- so what moves "
+            "is only how much the stated confidence can be believed."
+        ),
+        "temperature": round(temperature, 4),
+        "fitted_on": "validation",
+        "reported_over": "held-out test",
+        **measured,
+    }
+
+
+def subset_error_rate(
+    texts: Sequence[str],
+    correct: Sequence[bool],
+    marker: str,
+) -> dict[str, Any]:
+    """The error rate on rows containing ``marker``, against the rest.
+
+    Written for the URL bug `docs/dataset.md` defers to a retrain. Stripping `:/`
+    as an emoticon before URLs are masked leaves 1,658 of 1,857 URLs in the corpus
+    as a mangled fragment, and this is what that costs on the held-out set --
+    measured on the few hundred rows it actually touches rather than inferred from
+    a macro F1 that the difference could not move.
+    """
+    hits = np.asarray(correct, dtype=bool)
+    inside = np.array([marker in text for text in texts], dtype=bool)
+    outside = ~inside
+    return {
+        "marker": marker,
+        "samples": int(inside.sum()),
+        "error_rate": round(float((~hits[inside]).mean()), 4) if inside.any() else 0.0,
+        "error_rate_elsewhere": round(float((~hits[outside]).mean()), 4) if outside.any() else 0.0,
+    }

@@ -11,11 +11,12 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import numpy as np
 import pytest
 
 from emotion_timeline.analysis import error_analysis as ea
 from emotion_timeline.data.labels import EMOTIONS
-from emotion_timeline.training import summary
+from emotion_timeline.training import evaluate, summary
 
 CLASSES = ("Joy", "Sadness", "Anger")
 
@@ -181,3 +182,55 @@ def test_the_seven_real_classes_fit_the_record() -> None:
     assert set(record["classes"]) == set(EMOTIONS)
     assert record["error_rate"] == 0.0
     assert record["split"] == "held-out test"
+
+
+# --- decoding and calibration ------------------------------------------------
+
+
+def test_decode_names_the_class_and_how_sure_it_was() -> None:
+    logits = np.array([[5.0, 0.0, 0.0], [0.0, 0.0, 5.0]])
+    predicted, confidence = summary.decode(logits, CLASSES)
+    assert predicted == ["Joy", "Anger"]
+    assert confidence[0] == pytest.approx(confidence[1])
+    assert 0.9 < confidence[0] < 1.0
+
+
+def test_temperature_moves_the_confidence_and_never_the_class() -> None:
+    """Which is why calibrating cannot change accuracy, only what to believe."""
+    logits = np.array([[4.0, 1.0, 0.0], [0.0, 3.0, 1.0]])
+    sharp, sharp_confidence = summary.decode(logits, CLASSES, temperature=0.5)
+    flat, flat_confidence = summary.decode(logits, CLASSES, temperature=4.0)
+    assert sharp == flat
+    assert sharp_confidence[0] > flat_confidence[0]
+
+
+def test_calibration_is_fitted_on_one_split_and_reported_over_another() -> None:
+    generator = np.random.default_rng(5)
+    honest = generator.normal(size=(1500, 7))
+    drawn = np.array(
+        [generator.choice(7, p=row) for row in evaluate.softmax(honest)],
+        dtype=np.int64,
+    )
+    report = summary.calibration_report(honest * 3.0, drawn, honest * 3.0, drawn)
+    assert report["fitted_on"] == "validation"
+    assert report["reported_over"] == "held-out test"
+    assert report["temperature"] == pytest.approx(3.0, abs=0.5)
+    assert (
+        report["after"]["expected_calibration_error"]
+        < report["before"]["expected_calibration_error"]
+    )
+
+
+def test_the_url_bug_subset_is_measured_against_everything_else() -> None:
+    texts = ["see https/example.com", "see https/other.com", "plain text", "more plain"]
+    correct = [False, False, True, True]
+    block = summary.subset_error_rate(texts, correct, "https/")
+    assert block["samples"] == 2
+    assert block["error_rate"] == 1.0
+    assert block["error_rate_elsewhere"] == 0.0
+
+
+def test_a_subset_nothing_matches_reports_zero() -> None:
+    block = summary.subset_error_rate(["plain"], [True], "https/")
+    assert block["samples"] == 0
+    assert block["error_rate"] == 0.0

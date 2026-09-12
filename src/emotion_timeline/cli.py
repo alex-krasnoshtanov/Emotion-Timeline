@@ -10,7 +10,10 @@ import argparse
 import sys
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:  # pandas is imported inside the functions that need it
+    import pandas as pd
 
 BENCHMARKS = Path(__file__).resolve().parents[2] / "benchmarks"
 
@@ -289,13 +292,8 @@ def cmd_build_dataset(args: argparse.Namespace) -> int:
 
 
 def _read_dataset(path: str) -> tuple[list[str], list[str], list[str]]:
-    """Read a rebuilt dataset CSV into the three columns the split is keyed on."""
-    import pandas as pd
-
-    frame = pd.read_csv(path)
-    missing = {"text", "label", "source"} - set(frame.columns)
-    if missing:
-        raise SystemExit(f"{path} is missing {sorted(missing)}")
+    """The three columns the split is keyed on, as lists."""
+    frame = _read_frame(path)
     return (
         [str(value) for value in frame["text"]],
         [str(value) for value in frame["label"]],
@@ -410,6 +408,88 @@ def cmd_fine_tune(args: argparse.Namespace) -> int:
     print()
     print(f"wrote {written}")
     print(f"wrote {predictions}")
+    return 0
+
+
+def _read_frame(path: str) -> pd.DataFrame:
+    """A rebuilt dataset, with the three columns the split is keyed on."""
+    import pandas as pd
+
+    frame = pd.read_csv(path)
+    missing = {"text", "label", "source"} - set(frame.columns)
+    if missing:
+        raise SystemExit(f"{path} is missing {sorted(missing)}")
+    return frame
+
+
+def cmd_summarise(args: argparse.Namespace) -> int:
+    """Turn the predictions a run kept into the records the chapters read."""
+    import numpy as np
+
+    from emotion_timeline.data.labels import EMOTIONS
+    from emotion_timeline.training import run, splits, summary
+
+    manifest = splits.SplitManifest.load(args.manifest)
+    problems = splits.check_consistency(manifest)
+    for problem in problems:
+        print(f"inconsistent record: {problem}", file=sys.stderr)
+    if problems:
+        return 1
+
+    archive = np.load(args.predictions)
+    frame = _read_frame(args.dataset)
+    keys = splits.row_keys(
+        [str(v) for v in frame["text"]],
+        [str(v) for v in frame["label"]],
+        [str(v) for v in frame["source"]],
+        seed=manifest.seed,
+    )
+    text_of = dict(zip(keys, (str(v) for v in frame["text"]), strict=True))
+
+    classes = list(EMOTIONS)
+    held_keys = [str(key) for key in archive["test_row_key"]]
+    missing = [key for key in held_keys if key not in text_of]
+    if missing:
+        print(
+            f"{len(missing):,} held-out rows are not in {args.dataset}; "
+            "the predictions and the dataset are not the same build",
+            file=sys.stderr,
+        )
+        return 1
+
+    texts = [text_of[key] for key in held_keys]
+    true_index = archive["test_true"]
+    true = [classes[position] for position in true_index]
+    predicted, confidence = summary.decode(archive["test_logits"], classes)
+
+    record = summary.held_out_summary(texts, true, predicted, confidence, classes)
+    record["calibration"] = summary.calibration_report(
+        archive["validation_logits"],
+        archive["validation_true"],
+        archive["test_logits"],
+        true_index,
+    )
+    record["url_bug"] = summary.subset_error_rate(
+        texts, [a == b for a, b in zip(true, predicted, strict=True)], "https/"
+    )
+    written = run.write_record(record, args.out)
+
+    print(f"{record['total_samples']:,} held out, {record['total_errors']:,} wrong")
+    print(f"  accuracy {record['accuracy']:.4f}")
+    print()
+    for name, block in sorted(record["classes"].items(), key=lambda kv: -kv[1]["error_rate"]):
+        print(f"  {name:<9} {block['samples']:>6,} samples   {block['error_rate']:.2%} wrong")
+    print()
+    calibration = record["calibration"]
+    print(f"  temperature {calibration['temperature']:.3f}, fitted on validation")
+    for stage in ("before", "after"):
+        part = calibration[stage]
+        print(
+            f"    {stage:<6} calibration error {part['expected_calibration_error']:.4f}   "
+            f"confidence {part['correct']:.4f} right against {part['incorrect']:.4f} wrong"
+        )
+    print()
+    print(f"wrote {written}")
     return 0
 
 
@@ -642,6 +722,25 @@ def build_parser() -> argparse.ArgumentParser:
         help="weight the loss by inverse class frequency (default: off, as the card's model was)",
     )
     fine_tune_parser.set_defaults(func=cmd_fine_tune)
+
+    summarise_parser = sub.add_parser(
+        "summarise",
+        help="turn a run's kept predictions into the held-out record",
+        description=(
+            "Reads the logits a fine-tune saved and writes the error-analysis "
+            "record for them, in the same shape as the inherited one -- so the "
+            "same command and the same figures read both."
+        ),
+    )
+    summarise_parser.add_argument("--predictions", default="models/predictions-v1.npz")
+    summarise_parser.add_argument("--dataset", default="data/dataset.csv")
+    summarise_parser.add_argument(
+        "--manifest", default=str(BENCHMARKS / "training" / "split-manifest.json")
+    )
+    summarise_parser.add_argument(
+        "--out", default=str(BENCHMARKS / "training" / "held-out-summary.json")
+    )
+    summarise_parser.set_defaults(func=cmd_summarise)
 
     errors_parser = sub.add_parser(
         "errors",

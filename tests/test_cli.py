@@ -609,3 +609,118 @@ def test_fine_tune_writes_the_run_record_and_the_predictions(
     loaded = np.load(predictions)
     assert loaded["test_logits"].shape[1] == 7
     assert "RTX 5070" in capsys.readouterr().out
+
+
+# --- summarise ---------------------------------------------------------------
+
+
+def test_summarise_turns_kept_logits_into_the_chapters_record(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """End to end on sixty rows: predictions in, an error-analysis record out."""
+    import numpy as np
+
+    from emotion_timeline.analysis import error_analysis as ea
+    from emotion_timeline.data.labels import EMOTIONS
+    from emotion_timeline.training import run, splits
+
+    dataset, manifest_path = tiny_training_set(tmp_path)
+    manifest = splits.SplitManifest.load(manifest_path)
+    frames = run.load_split_frames(dataset, manifest)
+    config = run.build_config()
+
+    rng = np.random.default_rng(0)
+    tables = {}
+    for name in (splits.VALIDATION, splits.TEST):
+        frame = frames[name]
+        truth = np.array([config.label_index[str(v)] for v in frame["label"]], dtype=np.int16)
+        logits = rng.normal(size=(len(frame), 7)).astype(np.float32)
+        # Most rows right, some wrong, so the record has both kinds of answer.
+        boost = rng.random(len(frame)) < 0.85
+        logits[np.arange(len(frame)), truth] += np.where(boost, 4.0, -4.0)
+        tables[name] = {
+            "row_key": np.array([str(v) for v in frame["row_key"]]),
+            "true": truth,
+            "logits": logits,
+        }
+    predictions = run.save_predictions(tmp_path / "p.npz", tables)
+    out = tmp_path / "held-out.json"
+
+    assert (
+        cli.main(
+            [
+                "summarise",
+                "--predictions",
+                str(predictions),
+                "--dataset",
+                str(dataset),
+                "--manifest",
+                str(manifest_path),
+                "--out",
+                str(out),
+            ]
+        )
+        == 0
+    )
+
+    record = json.loads(out.read_text(encoding="utf-8"))
+    assert record["total_samples"] == manifest.part(splits.TEST)["rows"]
+    assert set(record["classes"]) == set(EMOTIONS)
+    assert "temperature" in record["calibration"]
+    assert record["url_bug"]["marker"] == "https/"
+
+    report = ea.ErrorReport.load(out)
+    assert ea.check_consistency(report) == []
+    assert "accuracy" in capsys.readouterr().out
+
+
+def test_summarise_refuses_predictions_from_another_build(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Row keys are content-derived, so a different dataset cannot be matched to them."""
+    import numpy as np
+
+    from emotion_timeline.training import run
+
+    dataset, manifest_path = tiny_training_set(tmp_path)
+    tables = {
+        name: {
+            "row_key": np.array(["0" * 64, "1" * 64]),
+            "true": np.array([0, 1], dtype=np.int16),
+            "logits": np.zeros((2, 7), dtype=np.float32),
+        }
+        for name in ("validation", "test")
+    }
+    predictions = run.save_predictions(tmp_path / "p.npz", tables)
+
+    assert (
+        cli.main(
+            [
+                "summarise",
+                "--predictions",
+                str(predictions),
+                "--dataset",
+                str(dataset),
+                "--manifest",
+                str(manifest_path),
+                "--out",
+                str(tmp_path / "out.json"),
+            ]
+        )
+        == 1
+    )
+    assert "not the same build" in capsys.readouterr().err
+
+
+def test_summarise_refuses_an_inconsistent_manifest(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from emotion_timeline.training import splits
+
+    raw = json.loads(Path(splits.DEFAULT_MANIFEST).read_text(encoding="utf-8"))
+    raw["source_rows"] = 9
+    broken = tmp_path / "broken.json"
+    broken.write_text(json.dumps(raw), encoding="utf-8")
+
+    assert cli.main(["summarise", "--manifest", str(broken)]) == 1
+    assert "inconsistent record" in capsys.readouterr().err
