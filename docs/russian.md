@@ -10,6 +10,9 @@ uv run emotion-timeline russian          # reads only committed records
 uv run emotion-timeline compare-russian  # reruns all four
 ```
 
+The winning checkpoint ships as a release asset with its digest recorded:
+`get_weights("rubert-v1")` fetches and verifies it.
+
 ![B native ruBERT wins outright; combining only helps where both models agree](../assets/russian-approaches.png)
 
 ## The set, and the one decision building it needs
