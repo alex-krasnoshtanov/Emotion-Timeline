@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import cast
 
 import numpy as np
 import pytest
@@ -234,3 +235,21 @@ def test_a_subset_nothing_matches_reports_zero() -> None:
     block = summary.subset_error_rate(["plain"], [True], "https/")
     assert block["samples"] == 0
     assert block["error_rate"] == 0.0
+
+
+def test_the_full_matrix_is_kept_so_precision_can_be_recomputed() -> None:
+    """Top-three confusions give recall but not precision, and so never F1."""
+    true = ["Joy", "Joy", "Sadness"]
+    predicted = ["Joy", "Sadness", "Sadness"]
+    matrix = summary.confusion_matrix(true, predicted, CLASSES)
+    assert matrix["Joy"] == {"Joy": 1, "Sadness": 1, "Anger": 0}
+    assert matrix["Sadness"] == {"Joy": 0, "Sadness": 1, "Anger": 0}
+    assert sum(sum(row.values()) for row in matrix.values()) == 3
+
+
+def test_the_record_carries_a_matrix_that_sums_to_its_own_headline() -> None:
+    record = synthetic()
+    matrix = cast("dict[str, dict[str, int]]", record["confusion"])
+    assert sum(sum(row.values()) for row in matrix.values()) == record["total_samples"]
+    right = sum(matrix[name][name] for name in matrix)
+    assert record["total_samples"] - right == record["total_errors"]

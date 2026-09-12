@@ -1,0 +1,51 @@
+{
+  "_comment": [
+    "One fine-tune of the classifier on the rebuilt dataset.",
+    "Written by `emotion-timeline fine-tune`. The weights themselves ship",
+    "as a release asset with the digest recorded below; this file is the",
+    "part small enough to read in a diff. Scores live beside it in",
+    "held-out-summary.json, which `emotion-timeline training` checks."
+  ],
+  "config": {
+    "model_id": "distilbert-base-uncased",
+    "epochs": 3,
+    "batch_size": 64,
+    "learning_rate": 5e-05,
+    "max_length": 128,
+    "weight_decay": 0.01,
+    "warmup_fraction": 0.06,
+    "seed": 20251115,
+    "weighted_loss": false,
+    "classes": [
+      "Anger",
+      "Disgust",
+      "Fear",
+      "Joy",
+      "Neutral",
+      "Sadness",
+      "Surprise"
+    ]
+  },
+  "split_manifest_sha256": "761aad9cc81fb35686cc8c6814c6353600991e49822b8479b7b7205e83b4580a",
+  "device": "NVIDIA GeForce RTX 5070",
+  "python": "3.13.11",
+  "seconds": 695.9,
+  "peak_mib": 2454,
+  "epochs": [
+    {
+      "epoch": 1.0,
+      "train_loss": 0.3160176111375285,
+      "val_accuracy": 0.9133228366493312
+    },
+    {
+      "epoch": 2.0,
+      "train_loss": 0.19444586401676356,
+      "val_accuracy": 0.916789923183358
+    },
+    {
+      "epoch": 3.0,
+      "train_loss": 0.14925280478760067,
+      "val_accuracy": 0.9159629117165259
+    }
+  ]
+}

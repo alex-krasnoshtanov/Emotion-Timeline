@@ -1,0 +1,242 @@
+{
+  "_comment": [
+    "Error analysis of the fine-tune, recomputed from the predictions it",
+    "kept rather than from a summary somebody wrote down. Every figure",
+    "here derives from the per-sample logits shipped with the weights,",
+    "so it can be re-derived rather than only checked for consistency."
+  ],
+  "split": "held-out test",
+  "total_samples": 62877,
+  "total_errors": 5254,
+  "accuracy": 0.9164,
+  "error_rate": 0.0836,
+  "classes": {
+    "Anger": {
+      "samples": 8695,
+      "errors": 517,
+      "error_rate": 0.0595,
+      "confused_with": {
+        "Sadness": 156,
+        "Fear": 151,
+        "Neutral": 84
+      }
+    },
+    "Disgust": {
+      "samples": 775,
+      "errors": 281,
+      "error_rate": 0.3626,
+      "confused_with": {
+        "Fear": 75,
+        "Sadness": 73,
+        "Joy": 47
+      }
+    },
+    "Fear": {
+      "samples": 8003,
+      "errors": 1201,
+      "error_rate": 0.1501,
+      "confused_with": {
+        "Sadness": 295,
+        "Joy": 235,
+        "Neutral": 225
+      }
+    },
+    "Joy": {
+      "samples": 22180,
+      "errors": 801,
+      "error_rate": 0.0361,
+      "confused_with": {
+        "Neutral": 310,
+        "Fear": 151,
+        "Sadness": 108
+      }
+    },
+    "Neutral": {
+      "samples": 2010,
+      "errors": 867,
+      "error_rate": 0.4313,
+      "confused_with": {
+        "Joy": 365,
+        "Fear": 213,
+        "Sadness": 131
+      }
+    },
+    "Sadness": {
+      "samples": 18842,
+      "errors": 975,
+      "error_rate": 0.0517,
+      "confused_with": {
+        "Fear": 394,
+        "Anger": 214,
+        "Neutral": 150
+      }
+    },
+    "Surprise": {
+      "samples": 2372,
+      "errors": 612,
+      "error_rate": 0.258,
+      "confused_with": {
+        "Fear": 226,
+        "Joy": 188,
+        "Neutral": 104
+      }
+    }
+  },
+  "confusion": {
+    "Anger": {
+      "Anger": 8178,
+      "Disgust": 38,
+      "Fear": 151,
+      "Joy": 75,
+      "Neutral": 84,
+      "Sadness": 156,
+      "Surprise": 13
+    },
+    "Disgust": {
+      "Anger": 43,
+      "Disgust": 494,
+      "Fear": 75,
+      "Joy": 47,
+      "Neutral": 30,
+      "Sadness": 73,
+      "Surprise": 13
+    },
+    "Fear": {
+      "Anger": 170,
+      "Disgust": 86,
+      "Fear": 6802,
+      "Joy": 235,
+      "Neutral": 225,
+      "Sadness": 295,
+      "Surprise": 190
+    },
+    "Joy": {
+      "Anger": 63,
+      "Disgust": 63,
+      "Fear": 151,
+      "Joy": 21379,
+      "Neutral": 310,
+      "Sadness": 108,
+      "Surprise": 106
+    },
+    "Neutral": {
+      "Anger": 62,
+      "Disgust": 42,
+      "Fear": 213,
+      "Joy": 365,
+      "Neutral": 1143,
+      "Sadness": 131,
+      "Surprise": 54
+    },
+    "Sadness": {
+      "Anger": 214,
+      "Disgust": 72,
+      "Fear": 394,
+      "Joy": 131,
+      "Neutral": 150,
+      "Sadness": 17867,
+      "Surprise": 14
+    },
+    "Surprise": {
+      "Anger": 31,
+      "Disgust": 19,
+      "Fear": 226,
+      "Joy": 188,
+      "Neutral": 104,
+      "Sadness": 44,
+      "Surprise": 1760
+    }
+  },
+  "length": {
+    "correct": {
+      "mean_characters": 94.36,
+      "mean_words": 18.63
+    },
+    "incorrect": {
+      "mean_characters": 76.91,
+      "mean_words": 14.73
+    },
+    "mann_whitney_u": 177824381.5,
+    "p_value": 6.601392621870714e-98
+  },
+  "textual_features": {
+    "_comment": "Surface markers, and the error rate with and without each. Counted on the cleaned text the model was trained on, where a shouted word is a [CAPS] marker rather than capitals.",
+    "ALL-CAPS word": {
+      "present_samples": 737,
+      "error_rate_present": 0.521,
+      "error_rate_absent": 0.0784
+    },
+    "Exclamation mark": {
+      "present_samples": 2062,
+      "error_rate_present": 0.501,
+      "error_rate_absent": 0.0694
+    },
+    "Question mark": {
+      "present_samples": 1169,
+      "error_rate_present": 0.5184,
+      "error_rate_absent": 0.0753
+    },
+    "Ellipsis": {
+      "present_samples": 1,
+      "error_rate_present": 0.0,
+      "error_rate_absent": 0.0836
+    }
+  },
+  "vocabulary": {
+    "_comment": "Words appearing at least 40 times, ranked by the share of their occurrences that sit in a wrong prediction.",
+    "error_biased": [
+      "won't",
+      "didn't",
+      "aww",
+      "ugh",
+      "can't"
+    ],
+    "correct_biased": [
+      "wronged",
+      "worthwhile",
+      "wimpy",
+      "whiney",
+      "welcomed"
+    ]
+  },
+  "confidence": {
+    "mean_when_correct": 0.9722,
+    "mean_when_incorrect": 0.5986,
+    "high_confidence_errors": 1448,
+    "high_confidence_error_share_of_errors": 0.2756,
+    "high_confidence_threshold": 0.7
+  },
+  "calibration": {
+    "_comment": "One scalar fitted on the validation split by minimising its negative log likelihood, then applied to the held-out set. Accuracy cannot change -- temperature does not reorder the classes -- so what moves is only how much the stated confidence can be believed.",
+    "temperature": 1.4994,
+    "fitted_on": "validation",
+    "reported_over": "held-out test",
+    "before": {
+      "expected_calibration_error": 0.0245,
+      "correct": 0.9722,
+      "incorrect": 0.5986,
+      "gap": 0.3736
+    },
+    "after": {
+      "expected_calibration_error": 0.0074,
+      "correct": 0.9598,
+      "incorrect": 0.4966,
+      "gap": 0.4632
+    }
+  },
+  "url_bug": {
+    "_comment": "The emoticon stripper eats the :// out of a URL before masking runs, so most URLs arrive as a fragment. Both subsets are reported because the one that would isolate the bug -- mangled against properly masked -- has too few masked rows to carry it.",
+    "mangled": {
+      "marker": "http/",
+      "samples": 244,
+      "error_rate": 0.4713,
+      "error_rate_elsewhere": 0.082
+    },
+    "masked": {
+      "marker": "[URL]",
+      "samples": 12,
+      "error_rate": 0.4167,
+      "error_rate_elsewhere": 0.0835
+    }
+  }
+}

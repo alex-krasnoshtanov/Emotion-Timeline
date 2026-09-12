@@ -724,3 +724,39 @@ def test_summarise_refuses_an_inconsistent_manifest(
 
     assert cli.main(["summarise", "--manifest", str(broken)]) == 1
     assert "inconsistent record" in capsys.readouterr().err
+
+
+# --- training ----------------------------------------------------------------
+
+
+def test_training_prints_the_comparison_the_readme_summarises(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    assert cli.main(["training"]) == 0
+    out = capsys.readouterr().out
+    assert "62,877 held out, accuracy 0.9164" in out
+    assert "distilbert-base-uncased, 3 epochs" in out
+    assert "against the card's held-out table" in out
+    assert "temperature 1.499" in out
+
+
+def test_training_never_prints_a_disgust_delta(capsys: pytest.CaptureFixture[str]) -> None:
+    """The one thing about this stage that is enforced rather than written down."""
+    assert cli.main(["training"]) == 0
+    for line in capsys.readouterr().out.splitlines():
+        if "Disgust" in line and "card" in line:
+            assert "not comparable" in line
+
+
+def test_training_refuses_records_that_contradict_each_other(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from emotion_timeline.training import report as training
+
+    summary = json.loads(Path(training.DEFAULT_SUMMARY).read_text(encoding="utf-8"))
+    summary["total_samples"] = 11
+    broken = tmp_path / "broken.json"
+    broken.write_text(json.dumps(summary), encoding="utf-8")
+
+    assert cli.main(["training", "--summary", str(broken)]) == 1
+    assert "inconsistent record" in capsys.readouterr().err

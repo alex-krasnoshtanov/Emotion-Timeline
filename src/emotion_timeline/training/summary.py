@@ -172,6 +172,21 @@ def vocabulary_bias(
     }
 
 
+def confusion_matrix(
+    true: Sequence[str],
+    predicted: Sequence[str],
+    classes: Sequence[str],
+) -> dict[str, dict[str, int]]:
+    """Rows are what a sample is, columns are what it was called, as plain names."""
+    from emotion_timeline.training.evaluate import confusion
+
+    counts = confusion(true, predicted, classes)
+    return {
+        name: dict(zip(classes, (int(value) for value in row), strict=True))
+        for name, row in zip(classes, counts, strict=True)
+    }
+
+
 def held_out_summary(
     texts: Sequence[str],
     true: Sequence[str],
@@ -200,6 +215,11 @@ def held_out_summary(
         "accuracy": round((total - errors) / total, 4) if total else 0.0,
         "error_rate": round(errors / total, 4) if total else 0.0,
         "classes": class_breakdown(true, predicted, classes),
+        # The whole 7x7, not just the worst three confusions per class: 49 integers
+        # is nothing to commit, and without the full matrix per-class precision --
+        # and so F1, and so any comparison against the model card's table -- cannot
+        # be recomputed from this file at all.
+        "confusion": confusion_matrix(true, predicted, classes),
         "length": length_statistics(texts, correct),
         "textual_features": textual_features(texts, correct),
         "vocabulary": vocabulary_bias(texts, correct),

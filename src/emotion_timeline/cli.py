@@ -469,9 +469,19 @@ def cmd_summarise(args: argparse.Namespace) -> int:
         archive["test_logits"],
         true_index,
     )
-    record["url_bug"] = summary.subset_error_rate(
-        texts, [a == b for a, b in zip(true, predicted, strict=True)], "https/"
-    )
+    hits = [a == b for a, b in zip(true, predicted, strict=True)]
+    # Both halves of the question docs/dataset.md asks: rows the emoticon stripper
+    # left as a mangled fragment, and rows that reached [URL] masking intact.
+    record["url_bug"] = {
+        "_comment": (
+            "The emoticon stripper eats the :// out of a URL before masking runs, so "
+            "most URLs arrive as a fragment. Both subsets are reported because the "
+            "one that would isolate the bug -- mangled against properly masked -- "
+            "has too few masked rows to carry it."
+        ),
+        "mangled": summary.subset_error_rate(texts, hits, "http/"),
+        "masked": summary.subset_error_rate(texts, hits, "[URL]"),
+    }
     written = run.write_record(record, args.out)
 
     print(f"{record['total_samples']:,} held out, {record['total_errors']:,} wrong")
@@ -490,6 +500,23 @@ def cmd_summarise(args: argparse.Namespace) -> int:
         )
     print()
     print(f"wrote {written}")
+    return 0
+
+
+def cmd_training(args: argparse.Namespace) -> int:
+    """What the fine-tune was, what it scored, and how that sits against the card."""
+    from emotion_timeline.training import report as training
+
+    record = training.TrainingReport.load(args.run, args.summary)
+    problems = training.check_consistency(record)
+    for problem in problems:
+        print(f"inconsistent record: {problem}", file=sys.stderr)
+    if problems:
+        return 1
+
+    card = training.card_f1_from(args.card_metrics)
+    for line in training.describe(record, card):
+        print(line)
     return 0
 
 
@@ -741,6 +768,26 @@ def build_parser() -> argparse.ArgumentParser:
         "--out", default=str(BENCHMARKS / "training" / "held-out-summary.json")
     )
     summarise_parser.set_defaults(func=cmd_summarise)
+
+    training_parser = sub.add_parser(
+        "training",
+        help="the fine-tune: what it was, what it scored, and how it compares",
+        description=(
+            "Reads only committed records, so it runs on a fresh clone with no "
+            "dataset and no weights. Reproducing those records is what `fine-tune` "
+            "and `summarise` do."
+        ),
+    )
+    training_parser.add_argument(
+        "--run", default=str(BENCHMARKS / "training" / "run-baseline.json")
+    )
+    training_parser.add_argument(
+        "--summary", default=str(BENCHMARKS / "training" / "held-out-summary.json")
+    )
+    training_parser.add_argument(
+        "--card-metrics", default=str(BENCHMARKS / "model" / "card-metrics.json")
+    )
+    training_parser.set_defaults(func=cmd_training)
 
     errors_parser = sub.add_parser(
         "errors",
