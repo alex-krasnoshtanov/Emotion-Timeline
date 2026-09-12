@@ -98,6 +98,8 @@ def _stages(args: argparse.Namespace) -> list[tuple[str, Any, Any, Any]]:
     from emotion_timeline.data import figures as dataset_figures
     from emotion_timeline.model import card as model_card
     from emotion_timeline.model import figures as model_figures
+    from emotion_timeline.russian import compare as russian_compare
+    from emotion_timeline.russian import figures as russian_figures
     from emotion_timeline.selection import figures as selection_figures
     from emotion_timeline.selection import runs as selection
     from emotion_timeline.training import figures as training_figures
@@ -133,6 +135,12 @@ def _stages(args: argparse.Namespace) -> list[tuple[str, Any, Any, Any]]:
             training.TrainingReport.load(args.run, args.summary),
             training_figures.FIGURES,
             training.check_consistency,
+        ),
+        (
+            "russian",
+            russian_compare.Comparison.load(args.comparison),
+            russian_figures.FIGURES,
+            russian_compare.check_consistency,
         ),
     ]
 
@@ -1099,6 +1107,9 @@ def build_parser() -> argparse.ArgumentParser:
     figures_parser.add_argument("--run", default=str(BENCHMARKS / "training" / "run-baseline.json"))
     figures_parser.add_argument(
         "--summary", default=str(BENCHMARKS / "training" / "held-out-summary.json")
+    )
+    figures_parser.add_argument(
+        "--comparison", default=str(BENCHMARKS / "russian" / "comparison.json")
     )
     add_selection_arguments(figures_parser)
     figures_parser.add_argument("--out", default="assets", help="output directory")

@@ -396,3 +396,25 @@ def test_the_incumbent_carries_its_caveat_into_the_record() -> None:
 def test_the_russian_numbers_are_far_below_the_english_one() -> None:
     """0.48 against 0.9164, which nobody should read as a translation problem alone."""
     assert float(committed().approaches["B native ruBERT"]["accuracy"]) < 0.6
+
+
+def chapter() -> str:
+    return (Path(__file__).resolve().parents[1] / "docs" / "russian.md").read_text(encoding="utf-8")
+
+
+def test_the_chapter_quotes_every_score_in_the_record() -> None:
+    text = chapter()
+    report = committed()
+    for name, block in {**report.approaches, **report.combinations}.items():
+        assert f"{float(block['accuracy']):.4f}" in text, name
+        assert f"{float(block['macro_f1']):.4f}" in text, name
+
+
+def test_the_chapter_says_the_ensemble_did_not_help() -> None:
+    text = chapter()
+    assert "does not raise accuracy" in text
+    assert "43.7%" in text
+
+
+def test_the_chapter_ends_by_saying_what_it_does_not_establish() -> None:
+    assert "## What this does not establish" in chapter()

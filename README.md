@@ -314,6 +314,53 @@ Full chapter: [`docs/fine-tune.md`](docs/fine-tune.md).
 
 ---
 
+## Result: Russian, translated or native
+
+The pipeline reads Russian; everything else here trains on English. The original
+resolved that by judgement — no good Russian dataset, so translate — and never
+scored the decision. `Djacon/ru-izard-emotions` held out makes it arithmetic.
+
+```bash
+uv run emotion-timeline russian      # reads only committed records
+```
+
+![B native ruBERT wins outright; combining only helps where both models agree](assets/russian-approaches.png)
+
+| | | Accuracy | Coverage |
+| --- | --- | ---: | ---: |
+| A | translate, then our English model | 0.3631 | all |
+| **B** | **`rubert-base-cased` fine-tuned here** | **0.4816** | all |
+| C | a multilingual model off the shelf | 0.3157 | all |
+| D | the one the pipeline actually shipped | 0.4538 | all |
+| | soft vote of A and B | 0.4799 | all |
+| | confidence pick | 0.4781 | all |
+| | **agreement filter** | **0.5604** | **43.7%** |
+
+**Classifying Russian directly beats translating it by twelve points**, so the
+original's judgement was wrong. It also beats the model the pipeline shipped —
+which was itself trained on this corpus, making its 0.4538 an upper bound rather
+than a measurement.
+
+**Combining two models does not raise accuracy.** Both full-coverage rules land
+*below* the stronger model alone: averaging a 0.36 model into a 0.48 one drags it
+down. That is the answer to the cross-validation the original marked "future" and
+never built.
+
+**Where it pays is as a filter.** On the 43.7% of rows where the two agree,
+accuracy is 0.5604 — eight points above either alone. Not a better classifier; a
+usable *believe this one / look at that one* signal, which is what a timeline
+needs. The coverage is published with the accuracy every time, because an accuracy
+over the rows two models happened to agree on is the same mistake as the 240-row
+word error rate this repository opens with.
+
+Every number here is far below the 0.9164 the same English model reaches on
+English, and language is only part of why: this set is **31.3% Neutral** against
+the English training set's 3.2%, on the class the model is already worst at.
+
+Full chapter: [`docs/russian.md`](docs/russian.md).
+
+---
+
 ## Result: where the classifier fails
 
 Accuracy of **89.95%** over 64,250 held-out samples, and the interesting part is
@@ -457,12 +504,13 @@ numbers from a command, and ends its chapter by saying what it does not establis
 | The trained classifier's records | `model` | [model.md](docs/model.md) |
 | Where it fails | `errors` | [error-analysis.md](docs/error-analysis.md) |
 | A model that exists | `split`, `fine-tune`, `summarise`, `training` | [fine-tune.md](docs/fine-tune.md) |
+| Russian, translated or native | `russian`, `build-russian`, `compare-russian` | [russian.md](docs/russian.md) |
 
 **Still open.** A per-scene timeline over the transcript this repository already
 commits, which is the thing the title promises and the one stage that would tie
-the others together in a picture. The nine families rerun on one feature pipeline
-and one held-out split is the other, and the only thing that would repair the
-ranking withdrawn above.
+the others together in a picture — now with a measured answer about which model it
+should run. The nine families rerun on one feature pipeline and one held-out split
+is the other, and the only thing that would repair the ranking withdrawn above.
 
 **Deliberately absent.**
 
