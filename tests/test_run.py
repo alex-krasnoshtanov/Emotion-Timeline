@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import numpy as np
 import pytest
 
 from emotion_timeline.data.labels import EMOTIONS
@@ -196,3 +197,80 @@ def test_the_record_round_trips_through_the_file(tmp_path: Path) -> None:
     )
     path = run.write_record(record, tmp_path / "nested" / "run.json")
     assert json.loads(path.read_text(encoding="utf-8")) == record
+
+
+# --- the learning-rate schedule ----------------------------------------------
+
+
+def test_the_rate_climbs_through_warmup_and_falls_to_zero() -> None:
+    assert run.warmup_then_decay(0, 10, 100) == 0.0
+    assert run.warmup_then_decay(5, 10, 100) == pytest.approx(0.5)
+    assert run.warmup_then_decay(10, 10, 100) == pytest.approx(1.0)
+    assert run.warmup_then_decay(55, 10, 100) == pytest.approx(0.5)
+    assert run.warmup_then_decay(100, 10, 100) == 0.0
+
+
+def test_the_rate_never_goes_negative_past_the_end() -> None:
+    assert run.warmup_then_decay(200, 10, 100) == 0.0
+
+
+def test_a_run_with_no_warmup_starts_at_full_rate() -> None:
+    assert run.warmup_then_decay(0, 0, 100) == pytest.approx(1.0)
+
+
+def test_a_schedule_with_nowhere_to_decay_is_not_a_division_by_zero() -> None:
+    assert run.warmup_then_decay(10, 10, 10) == 0.0
+
+
+# --- the predictions this run keeps and the original did not -----------------
+
+
+def test_the_table_lines_keys_labels_and_logits_up(tmp_path: Path) -> None:
+    dataset = tiny_dataset(tmp_path / "tiny.csv")
+    frames = run.load_split_frames(dataset, tiny_manifest(tmp_path, dataset))
+    config = run.build_config()
+    held = frames["test"]
+    logits = np.zeros((len(held), 7), dtype=np.float32)
+    table = run.predictions_table(held, logits, config)
+    assert list(table["row_key"]) == list(held["row_key"])
+    assert table["true"].tolist() == [config.label_index[label] for label in held["label"]]
+    assert table["logits"].shape == (len(held), 7)
+
+
+def test_logits_that_do_not_match_the_rows_are_refused(tmp_path: Path) -> None:
+    dataset = tiny_dataset(tmp_path / "tiny.csv")
+    frames = run.load_split_frames(dataset, tiny_manifest(tmp_path, dataset))
+    with pytest.raises(ValueError, match="rows of logits"):
+        run.predictions_table(frames["test"], np.zeros((3, 7)), run.build_config())
+
+
+def test_saved_predictions_read_back_as_what_was_written(tmp_path: Path) -> None:
+    tables = {
+        "test": {
+            "row_key": np.array(["a", "b"]),
+            "true": np.array([0, 3], dtype=np.int16),
+            "logits": np.zeros((2, 7), dtype=np.float32),
+        }
+    }
+    path = run.save_predictions(tmp_path / "nested" / "p.npz", tables)
+    loaded = np.load(path)
+    assert list(loaded["test_row_key"]) == ["a", "b"]
+    assert loaded["test_true"].tolist() == [0, 3]
+    assert loaded["test_logits"].shape == (2, 7)
+
+
+def test_encode_asks_the_tokeniser_for_a_batch_padded_to_its_longest() -> None:
+    """A fake tokeniser, because what is being checked is the call, not the vocabulary."""
+    seen: dict[str, object] = {}
+
+    def tokeniser(texts: list[str], **options: object) -> dict[str, object]:
+        seen["texts"] = texts
+        seen.update(options)
+        return {"input_ids": texts}
+
+    run.encode(tokeniser, ["one", "two"], max_length=128)
+    assert seen["texts"] == ["one", "two"]
+    assert seen["truncation"] is True
+    assert seen["padding"] is True
+    assert seen["max_length"] == 128
+    assert seen["return_tensors"] == "pt"

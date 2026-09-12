@@ -174,3 +174,199 @@ def write_record(record: Mapping[str, Any], path: str | Path) -> Path:
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8", newline="\n")
     return out
+
+
+def warmup_then_decay(step: int, warmup: int, total: int) -> float:
+    """Learning-rate multiplier: up over ``warmup`` steps, then down to zero.
+
+    Written out rather than taken from ``transformers``, which is five lines
+    either way and one fewer library API to track across versions. It is also
+    then testable, which the transformers version is not.
+    """
+    if warmup > 0 and step < warmup:
+        return step / warmup
+    remaining = total - warmup
+    return max(0.0, (total - step) / remaining) if remaining > 0 else 0.0
+
+
+def encode(tokenizer: Any, texts: Sequence[str], max_length: int) -> Any:
+    """Tokenise one batch, padded to its own longest sequence rather than to 128."""
+    return tokenizer(
+        list(texts),
+        truncation=True,
+        max_length=max_length,
+        padding=True,
+        return_tensors="pt",
+    )
+
+
+def forward_all(
+    model: Any,
+    tokenizer: Any,
+    frame: pd.DataFrame,
+    config: TrainConfig,
+    device: str = "cuda",
+) -> np.ndarray:  # pragma: no cover - needs a GPU
+    """Logits for every row of a split, in the frame's own order."""
+    import torch
+
+    model.eval()
+    out: list[np.ndarray] = []
+    texts = [str(value) for value in frame["text"]]
+    with torch.no_grad():
+        for index in batches(len(texts), config.batch_size, shuffle=False, seed=0):
+            encoded = encode(tokenizer, [texts[position] for position in index], config.max_length)
+            encoded = {key: value.to(device) for key, value in encoded.items()}
+            with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
+                logits = model(**encoded).logits
+            out.append(logits.float().cpu().numpy())
+    return np.concatenate(out)
+
+
+def train(
+    config: TrainConfig,
+    frames: Mapping[str, pd.DataFrame],
+    weights_dir: str | Path,
+    progress: Any = print,
+) -> tuple[list[dict[str, float]], dict[str, np.ndarray]]:  # pragma: no cover - needs a GPU
+    """Fine-tune, reporting each epoch, and return the history and the logits.
+
+    Validation is scored every epoch so the history shows whether the run was
+    still improving when it stopped -- which is the question a reader asks of
+    three epochs, and which the inherited record cannot answer about its own.
+    """
+    import time
+
+    import torch
+    from torch.nn import CrossEntropyLoss
+    from transformers import AutoModelForSequenceClassification, AutoTokenizer
+
+    torch.manual_seed(config.seed)
+    index = config.label_index
+    tokenizer = AutoTokenizer.from_pretrained(config.model_id)
+    model = AutoModelForSequenceClassification.from_pretrained(
+        config.model_id,
+        num_labels=len(config.classes),
+        id2label=dict(enumerate(config.classes)),
+        label2id=index,
+    ).to("cuda")
+
+    train_frame = frames[splits.TRAIN]
+    texts = [str(value) for value in train_frame["text"]]
+    targets = np.array([index[str(value)] for value in train_frame["label"]], dtype=np.int64)
+
+    weight = None
+    if config.weighted_loss:
+        counts = splits.counts_of(str(value) for value in train_frame["label"])
+        weight = torch.tensor(
+            class_weights(counts, config.classes), dtype=torch.float32, device="cuda"
+        )
+    loss_function = CrossEntropyLoss(weight=weight)
+
+    steps_per_epoch = (len(texts) + config.batch_size - 1) // config.batch_size
+    total_steps = steps_per_epoch * config.epochs
+    optimiser = torch.optim.AdamW(
+        model.parameters(), lr=config.learning_rate, weight_decay=config.weight_decay
+    )
+    warmup_steps = int(total_steps * config.warmup_fraction)
+    schedule = torch.optim.lr_scheduler.LambdaLR(
+        optimiser, lambda step: warmup_then_decay(step, warmup_steps, total_steps)
+    )
+
+    torch.cuda.reset_peak_memory_stats()
+    history: list[dict[str, float]] = []
+    started = time.monotonic()
+
+    for epoch in range(1, config.epochs + 1):
+        model.train()
+        running = 0.0
+        seen = 0
+        for step, batch in enumerate(
+            batches(len(texts), config.batch_size, shuffle=True, seed=config.seed + epoch), start=1
+        ):
+            encoded = encode(tokenizer, [texts[position] for position in batch], config.max_length)
+            encoded = {key: value.to("cuda") for key, value in encoded.items()}
+            labels = torch.from_numpy(targets[batch]).to("cuda")
+
+            with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
+                logits = model(**encoded).logits
+            loss = loss_function(logits.float(), labels)
+
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+            optimiser.step()
+            schedule.step()
+            optimiser.zero_grad(set_to_none=True)
+
+            running += float(loss.item()) * len(batch)
+            seen += len(batch)
+            if step % 200 == 0 or step == steps_per_epoch:
+                progress(
+                    f"  epoch {epoch}  step {step:>5,}/{steps_per_epoch:,}  "
+                    f"loss {running / seen:.4f}  {time.monotonic() - started:.0f}s"
+                )
+
+        validation = frames[splits.VALIDATION]
+        logits = forward_all(model, tokenizer, validation, config)
+        truth = np.array([index[str(value)] for value in validation["label"]], dtype=np.int64)
+        accuracy = float((logits.argmax(axis=1) == truth).mean())
+        history.append(
+            {"epoch": float(epoch), "train_loss": running / seen, "val_accuracy": accuracy}
+        )
+        progress(f"  epoch {epoch}  validation accuracy {accuracy:.4f}")
+
+    out = Path(weights_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    model.save_pretrained(out)
+    tokenizer.save_pretrained(out)
+    progress(f"  weights written to {out}")
+
+    logits = {
+        name: forward_all(model, tokenizer, frames[name], config)
+        for name in (splits.VALIDATION, splits.TEST)
+    }
+    history.append(
+        {
+            "seconds": time.monotonic() - started,
+            "peak_mib": float(torch.cuda.max_memory_allocated() // (1024 * 1024)),
+        }
+    )
+    return history, logits
+
+
+def predictions_table(
+    frame: pd.DataFrame,
+    logits: np.ndarray,
+    config: TrainConfig,
+) -> dict[str, np.ndarray]:
+    """Row keys, true class and logits, aligned, ready to be saved.
+
+    The per-sample predictions of the inherited model were not kept, which is why
+    `docs/error-analysis.md` renders from a summary rather than recomputing.
+    Keeping these is the one thing this run can do that the original cannot be
+    made to do retrospectively.
+    """
+    if len(frame) != len(logits):
+        raise ValueError(f"{len(frame)} rows against {len(logits)} rows of logits")
+    index = config.label_index
+    return {
+        "row_key": np.array([str(value) for value in frame["row_key"]]),
+        "true": np.array([index[str(value)] for value in frame["label"]], dtype=np.int16),
+        "logits": np.asarray(logits, dtype=np.float32),
+    }
+
+
+def save_predictions(path: str | Path, tables: Mapping[str, Mapping[str, np.ndarray]]) -> Path:
+    """One compressed archive per run, holding every split it scored."""
+    out = Path(path)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    flattened = {
+        f"{split}_{field}": array
+        for split, table in tables.items()
+        for field, array in table.items()
+    }
+    # numpy's stub types every keyword of savez_compressed as its own
+    # allow_pickle flag, so the arrays have to go through an untyped call.
+    save: Any = np.savez_compressed
+    save(out, **flattened)
+    return out

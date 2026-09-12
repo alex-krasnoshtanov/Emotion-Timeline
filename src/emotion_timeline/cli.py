@@ -356,6 +356,63 @@ def cmd_split(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_fine_tune(args: argparse.Namespace) -> int:
+    """Fine-tune the classifier on the rebuilt dataset."""
+    from emotion_timeline.training import preflight, run, splits
+
+    try:
+        device = preflight.require()
+    except RuntimeError as error:
+        print(f"cannot train here: {error}", file=sys.stderr)
+        return 1
+    except ImportError:
+        print("training needs --extra model (uv sync --extra model)", file=sys.stderr)
+        return 1
+
+    manifest = splits.SplitManifest.load(args.manifest)
+    problems = splits.check_consistency(manifest)
+    for problem in problems:
+        print(f"inconsistent record: {problem}", file=sys.stderr)
+    if problems:
+        return 1
+
+    config = run.build_config(
+        model_id=args.model_id,
+        epochs=args.epochs,
+        batch_size=args.batch_size,
+        learning_rate=args.learning_rate,
+        max_length=args.max_length,
+        seed=args.seed,
+        weighted_loss=args.class_weights,
+    )
+    print(f"{config.model_id}, {config.epochs} epochs, batch {config.batch_size}, on {device.name}")
+    frames = run.load_split_frames(args.dataset, manifest)
+    for name in splits.SPLITS:
+        print(f"  {name:<11} {len(frames[name]):>7,}")
+    print()
+
+    history, logits = run.train(config, frames, args.weights)
+    tail = history.pop()
+
+    record = run.run_record(
+        config,
+        manifest,
+        history,
+        seconds=tail["seconds"],
+        peak_mib=int(tail["peak_mib"]),
+        device_name=device.name,
+    )
+    written = run.write_record(record, args.out)
+    predictions = run.save_predictions(
+        args.predictions,
+        {name: run.predictions_table(frames[name], logits[name], config) for name in logits},
+    )
+    print()
+    print(f"wrote {written}")
+    print(f"wrote {predictions}")
+    return 0
+
+
 def cmd_model(args: argparse.Namespace) -> int:
     """What the two surviving records of the trained classifier can support."""
     from emotion_timeline.model.card import (
@@ -554,6 +611,37 @@ def build_parser() -> argparse.ArgumentParser:
     split_parser.add_argument("--verify", help="recompute the split from this rebuilt CSV")
     split_parser.add_argument("--write", help="regenerate the manifest from this rebuilt CSV")
     split_parser.set_defaults(func=cmd_split)
+
+    fine_tune_parser = sub.add_parser(
+        "fine-tune",
+        help="train the classifier on the rebuilt dataset (needs --extra model and a GPU)",
+        description=(
+            "Runs preflight first, then fine-tunes on the committed split. Writes "
+            "the run record under benchmarks/, the weights and the per-sample "
+            "logits outside it -- those ship as release assets, not in git."
+        ),
+    )
+    fine_tune_parser.add_argument("--dataset", default="data/dataset.csv")
+    fine_tune_parser.add_argument(
+        "--manifest", default=str(BENCHMARKS / "training" / "split-manifest.json")
+    )
+    fine_tune_parser.add_argument(
+        "--out", default=str(BENCHMARKS / "training" / "run-baseline.json")
+    )
+    fine_tune_parser.add_argument("--weights", default="models/distilbert-v1")
+    fine_tune_parser.add_argument("--predictions", default="models/predictions-v1.npz")
+    fine_tune_parser.add_argument("--model-id", default=None)
+    fine_tune_parser.add_argument("--epochs", type=int, default=None)
+    fine_tune_parser.add_argument("--batch-size", type=int, default=None)
+    fine_tune_parser.add_argument("--learning-rate", type=float, default=None)
+    fine_tune_parser.add_argument("--max-length", type=int, default=None)
+    fine_tune_parser.add_argument("--seed", type=int, default=None)
+    fine_tune_parser.add_argument(
+        "--class-weights",
+        action="store_true",
+        help="weight the loss by inverse class frequency (default: off, as the card's model was)",
+    )
+    fine_tune_parser.set_defaults(func=cmd_fine_tune)
 
     errors_parser = sub.add_parser(
         "errors",

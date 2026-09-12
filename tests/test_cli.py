@@ -471,3 +471,141 @@ def test_preflight_takes_the_memory_a_smaller_run_needs(
     monkeypatch.setattr(preflight, "smoke", lambda: None)
     assert cli.main(["preflight", "--need-mib", "99999"]) == 1
     assert "11,000 MiB free" in capsys.readouterr().err
+
+
+# --- fine-tune ---------------------------------------------------------------
+
+
+def tiny_training_set(tmp_path: Path) -> tuple[Path, Path]:
+    """A dataset and its manifest, seven classes, small enough to split."""
+    import pandas as pd
+
+    from emotion_timeline.data.labels import EMOTIONS
+    from emotion_timeline.training import splits
+
+    dataset = tmp_path / "tiny.csv"
+    rows = ["text,label,source"]
+    for label in EMOTIONS:
+        rows += [f"{label.lower()} sentence {index},{label},MELD" for index in range(20)]
+    dataset.write_text("\n".join(rows) + "\n", encoding="utf-8")
+
+    frame = pd.read_csv(dataset)
+    record = splits.build_manifest(
+        [str(v) for v in frame["text"]],
+        [str(v) for v in frame["label"]],
+        [str(v) for v in frame["source"]],
+    )
+    return dataset, splits.write_manifest(record, tmp_path / "manifest.json")
+
+
+def fake_card() -> object:
+    from emotion_timeline.training import preflight
+
+    return preflight.Device(
+        name="NVIDIA GeForce RTX 5070",
+        capability=(12, 0),
+        total_mib=12_227,
+        free_mib=11_000,
+        torch_version="2.11.0+cu128",
+        cuda_version="12.8",
+        arch_list=("sm_120",),
+    )
+
+
+def test_fine_tune_stops_before_training_when_the_card_cannot_run_it(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from emotion_timeline.training import preflight, run
+
+    def refuse(*_: object, **__: object) -> None:
+        raise RuntimeError("torch was built without CUDA")
+
+    monkeypatch.setattr(preflight, "require", refuse)
+    monkeypatch.setattr(
+        run, "train", lambda *a, **k: pytest.fail("training started on a card that cannot run it")
+    )
+    assert cli.main(["fine-tune"]) == 1
+    assert "cannot train here" in capsys.readouterr().err
+
+
+def test_fine_tune_refuses_a_manifest_that_does_not_hold_together(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from emotion_timeline.training import preflight, run, splits
+
+    monkeypatch.setattr(preflight, "require", fake_card)
+    monkeypatch.setattr(run, "train", lambda *a, **k: pytest.fail("trained on a broken record"))
+
+    raw = json.loads(Path(splits.DEFAULT_MANIFEST).read_text(encoding="utf-8"))
+    raw["source_rows"] = 7
+    broken = tmp_path / "broken.json"
+    broken.write_text(json.dumps(raw), encoding="utf-8")
+
+    assert cli.main(["fine-tune", "--manifest", str(broken)]) == 1
+    assert "inconsistent record" in capsys.readouterr().err
+
+
+def test_fine_tune_writes_the_run_record_and_the_predictions(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The command end to end, with the hour of GPU replaced by fixed logits."""
+    from collections.abc import Mapping
+
+    import numpy as np
+    import pandas as pd
+
+    from emotion_timeline.training import preflight, run, splits
+
+    dataset, manifest = tiny_training_set(tmp_path)
+    monkeypatch.setattr(preflight, "require", fake_card)
+
+    def fake_train(
+        config: object,
+        frames: Mapping[str, pd.DataFrame],
+        weights: object,
+        *rest: object,
+    ) -> tuple[list[dict[str, float]], dict[str, np.ndarray]]:
+        history = [
+            {"epoch": 1.0, "train_loss": 1.2, "val_accuracy": 0.5},
+            {"seconds": 12.0, "peak_mib": 4500.0},
+        ]
+        logits = {
+            name: np.zeros((len(frames[name]), 7), dtype=np.float32)
+            for name in (splits.VALIDATION, splits.TEST)
+        }
+        return history, logits
+
+    monkeypatch.setattr(run, "train", fake_train)
+
+    out = tmp_path / "run.json"
+    predictions = tmp_path / "predictions.npz"
+    assert (
+        cli.main(
+            [
+                "fine-tune",
+                "--dataset",
+                str(dataset),
+                "--manifest",
+                str(manifest),
+                "--out",
+                str(out),
+                "--weights",
+                str(tmp_path / "weights"),
+                "--predictions",
+                str(predictions),
+                "--epochs",
+                "1",
+            ]
+        )
+        == 0
+    )
+    record = json.loads(out.read_text(encoding="utf-8"))
+    assert record["config"]["epochs"] == 1
+    assert record["seconds"] == 12.0
+    assert record["peak_mib"] == 4500
+    assert record["device"] == "NVIDIA GeForce RTX 5070"
+    assert len(record["epochs"]) == 1
+
+    loaded = np.load(predictions)
+    assert loaded["test_logits"].shape[1] == 7
+    assert "RTX 5070" in capsys.readouterr().out
