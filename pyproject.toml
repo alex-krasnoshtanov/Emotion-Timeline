@@ -49,6 +49,8 @@ model = [
     "datasets>=3.0",
     "scikit-learn>=1.5",
     "accelerate>=0.34",
+    # Marian, the ru->en translator, ships only a slow tokenizer.
+    "sentencepiece>=0.2",
 ]
 
 [project.scripts]

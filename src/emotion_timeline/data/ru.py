@@ -177,7 +177,9 @@ def build(
         if not drop_enthusiasm
         else "collapse by priority; enthusiasm dropped",
     )
-    out = frame[["text", "label"]]
+    # A source column so `training/splits.py` can key rows the same way it keys
+    # the English build. One corpus, so one value.
+    out = frame[["text", "label"]].assign(source=SOURCE_DATASET)
     record.counts.update(
         {str(name): int(count) for name, count in out["label"].value_counts().items()}
     )
