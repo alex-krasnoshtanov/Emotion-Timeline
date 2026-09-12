@@ -1,0 +1,357 @@
+"""The timeline: scene grouping, the aggregation, and the record it publishes.
+
+Two claims here are worth more than the rest. The first is that a scene's
+probability is weighted by *duration*, because unweighted averaging is the
+obvious implementation and it lets a run of two-word interjections outvote the
+paragraph they interrupt. The second is that the record's scenes have to regroup
+out of the transcript it names -- the record carries no text, so without that
+check a timeline could quietly describe a different recording.
+"""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from typing import Any
+
+import numpy as np
+import pytest
+
+from emotion_timeline.data.labels import EMOTIONS
+from emotion_timeline.pipeline import timeline as pipeline
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def committed() -> pipeline.Timeline:
+    return pipeline.Timeline.load()
+
+
+def transcript() -> list[pipeline.Segment]:
+    return pipeline.read_segments(pipeline.DEFAULT_SEGMENTS)
+
+
+def segments(*spans: tuple[float, float]) -> list[pipeline.Segment]:
+    return [
+        pipeline.Segment(start, end, f"line {index}") for index, (start, end) in enumerate(spans)
+    ]
+
+
+def flat(rows: int, peak: str) -> np.ndarray:
+    """A probability matrix where every row prefers ``peak``."""
+    values = np.full((rows, len(EMOTIONS)), 0.1)
+    values[:, EMOTIONS.index(peak)] = 0.4
+    normalised: np.ndarray = values / values.sum(axis=1, keepdims=True)
+    return normalised
+
+
+# --- scene grouping -----------------------------------------------------------
+
+
+def test_a_long_silence_starts_a_new_scene_and_a_short_one_does_not() -> None:
+    scenes = pipeline.group(segments((0, 5), (5.5, 8), (20, 25)), gap=1.0)
+    assert [len(scene.segments) for scene in scenes] == [2, 1]
+    assert scenes[0].start_s == 0 and scenes[0].end_s == 8
+    assert scenes[1].index == 1
+
+
+def test_the_gap_is_a_threshold_not_a_rule_about_silence() -> None:
+    """Same transcript, two thresholds, two different timelines."""
+    spans = segments((0, 5), (7, 9), (11, 13))
+    assert len(pipeline.group(spans, gap=1.0)) == 3
+    assert len(pipeline.group(spans, gap=5.0)) == 1
+
+
+def test_grouping_nothing_gives_nothing() -> None:
+    assert pipeline.group([]) == []
+
+
+def test_a_scene_joins_its_segments_text_and_skips_the_empty_ones() -> None:
+    scene = pipeline.group(
+        [
+            pipeline.Segment(0, 1, "first"),
+            pipeline.Segment(1, 2, ""),
+            pipeline.Segment(2, 3, "last"),
+        ]
+    )[0]
+    assert scene.text == "first last"
+
+
+# --- the transcript reader ----------------------------------------------------
+
+
+def test_the_committed_transcript_reads_as_segments() -> None:
+    parts = transcript()
+    assert len(parts) == 316
+    assert parts[0].start_s == 1.915
+    assert all(segment.end_s >= segment.start_s for segment in parts)
+
+
+def test_either_text_column_is_accepted(tmp_path: Path) -> None:
+    """`hypothesis` from the annotated benchmark, `text` from `transcribe`."""
+    for column in ("text", "hypothesis"):
+        path = tmp_path / f"{column}.csv"
+        path.write_text(f"start_s,end_s,{column}\n0,1,hello\n", encoding="utf-8", newline="\n")
+        assert pipeline.read_segments(path)[0].text == "hello"
+
+
+def test_a_csv_with_no_text_column_is_refused(tmp_path: Path) -> None:
+    path = tmp_path / "bad.csv"
+    path.write_text("start_s,end_s,words\n0,1,hello\n", encoding="utf-8", newline="\n")
+    with pytest.raises(ValueError, match="no text column"):
+        pipeline.read_segments(path)
+
+
+def test_an_empty_csv_is_refused(tmp_path: Path) -> None:
+    path = tmp_path / "empty.csv"
+    path.write_text("start_s,end_s,text\n", encoding="utf-8", newline="\n")
+    with pytest.raises(ValueError, match="no rows"):
+        pipeline.read_segments(path)
+
+
+def test_paths_are_recorded_relative_to_the_repository() -> None:
+    assert pipeline.relative(pipeline.DEFAULT_SEGMENTS) == "benchmarks/stt/assemblyai-best.csv"
+    outside = Path.home() / "elsewhere.csv"
+    assert pipeline.relative(outside) == outside.resolve().as_posix()
+
+
+# --- aggregation --------------------------------------------------------------
+
+
+def test_a_scenes_probability_is_weighted_by_duration_not_by_segment_count() -> None:
+    """The long segment wins, which unweighted averaging would get backwards."""
+    scene = pipeline.group(segments((0, 60), (60, 61), (61, 62)), gap=1.0)[0]
+    values = np.vstack([flat(1, "Sadness"), flat(2, "Joy")])
+    aggregated = pipeline.scene_probabilities([scene], values)
+    assert EMOTIONS[int(aggregated.argmax())] == "Sadness"
+    assert EMOTIONS[int(values.mean(axis=0).argmax())] == "Joy"
+
+
+def test_a_scene_of_zero_length_segments_averages_rather_than_dividing_by_zero() -> None:
+    scene = pipeline.group([pipeline.Segment(0, 0, "a"), pipeline.Segment(0, 0, "b")], gap=1.0)[0]
+    aggregated = pipeline.scene_probabilities(
+        [scene], np.vstack([flat(1, "Fear"), flat(1, "Fear")])
+    )
+    assert EMOTIONS[int(aggregated.argmax())] == "Fear"
+
+
+def test_probabilities_that_do_not_cover_every_segment_are_refused() -> None:
+    scenes = pipeline.group(segments((0, 1), (1, 2)), gap=1.0)
+    with pytest.raises(ValueError, match="against 2 segments"):
+        pipeline.scene_probabilities(scenes, flat(1, "Joy"))
+
+
+def test_each_scene_keeps_its_own_segments() -> None:
+    scenes = pipeline.group(segments((0, 1), (5, 6)), gap=1.0)
+    aggregated = pipeline.scene_probabilities(scenes, np.vstack([flat(1, "Anger"), flat(1, "Joy")]))
+    assert [EMOTIONS[int(row.argmax())] for row in aggregated] == ["Anger", "Joy"]
+
+
+# --- the record ---------------------------------------------------------------
+
+
+def built() -> dict[str, Any]:
+    scenes = pipeline.group(segments((0, 5), (5.5, 8), (20, 25)), gap=1.0)
+    return pipeline.build_record(
+        scenes,
+        np.vstack([flat(2, "Joy"), flat(1, "Fear")]),
+        np.vstack([flat(2, "Joy"), flat(1, "Anger")]),
+        source="somewhere.csv",
+        gap=1.0,
+        primary_model={"name": "B", "model": "b", "temperature": 1.2},
+        second_model={"name": "A", "model": "a", "temperature": 2.6},
+    )
+
+
+def test_the_record_marks_agreement_scene_by_scene() -> None:
+    record = built()
+    rows = record["timeline"]
+    assert [row["emotion"] for row in rows] == ["Joy", "Fear"]
+    assert [row["second_opinion"] for row in rows] == ["Joy", "Anger"]
+    assert [row["agreed"] for row in rows] == [True, False]
+    assert record["agreement"]["scenes"] == 1
+    assert record["agreement"]["share"] == 0.5
+
+
+def test_the_record_does_not_repeat_the_transcript() -> None:
+    """Scene text lives in the transcript; duplicating it lets the two drift."""
+    assert "text" not in json.dumps(built()["timeline"])
+
+
+# --- the committed timeline ---------------------------------------------------
+
+
+def test_the_committed_timeline_holds_together() -> None:
+    assert pipeline.check_consistency(committed(), transcript()) == []
+
+
+def test_the_committed_timeline_is_the_documentary() -> None:
+    report = committed()
+    assert report.raw["segments"] == 316
+    assert report.raw["scenes"] == 47
+    assert report.gap == 1.0
+    assert round(report.duration / 60) == 52
+    assert report.raw["source"] == "benchmarks/stt/assemblyai-best.csv"
+
+
+def test_the_emotion_is_the_native_model_and_the_translation_is_the_second_opinion() -> None:
+    """No combination rule beat B alone, so the timeline does not use one."""
+    report = committed()
+    assert "ruBERT" in report.raw["primary"]["name"]
+    assert "translate" in report.raw["second_opinion"]["name"]
+    assert (
+        report.raw["primary"]["held_out_accuracy"]
+        > report.raw["second_opinion"]["held_out_accuracy"]
+    )
+
+
+def test_documentary_narration_comes_out_mostly_neutral() -> None:
+    """The headline of the chapter, and the reason the confidence strip matters."""
+    counts = committed().counts()
+    assert counts["Neutral"] == 32
+    assert sum(counts.values()) == 47
+    assert set(counts) == set(EMOTIONS)
+
+
+def test_the_agreement_rate_carries_its_caveat() -> None:
+    """It is a consistency signal. The record has to say so, beside the number."""
+    agreement = committed().agreement
+    assert agreement["scenes"] == 23
+    assert "not an accuracy" in agreement["caveat"]
+    assert "ru-izard" in agreement["measured_on"]
+
+
+# --- what the consistency check catches ---------------------------------------
+
+
+def broken(**changes: Any) -> pipeline.Timeline:
+    """The committed record with one scene altered."""
+    report = committed()
+    raw = json.loads(json.dumps(report.raw))
+    raw["timeline"][0].update(changes)
+    return pipeline.Timeline(raw=raw, source=report.source, digest=report.digest)
+
+
+def test_a_flag_that_contradicts_its_own_two_predictions_is_caught() -> None:
+    problems = pipeline.check_consistency(broken(agreed=not committed().scenes[0]["agreed"]))
+    assert any("contradicts" in problem for problem in problems)
+
+
+def test_an_emotion_outside_the_seven_is_caught() -> None:
+    assert any(
+        "not one of the seven" in p for p in pipeline.check_consistency(broken(emotion="Love"))
+    )
+
+
+def test_a_confidence_below_one_seventh_is_not_a_top_class_probability() -> None:
+    assert any(
+        "top-class probability" in p for p in pipeline.check_consistency(broken(confidence=0.05))
+    )
+
+
+def test_a_scene_that_ends_before_it_starts_is_caught() -> None:
+    assert any("ends before it starts" in p for p in pipeline.check_consistency(broken(end_s=0.0)))
+
+
+def test_overlapping_scenes_are_caught() -> None:
+    report = committed()
+    raw = json.loads(json.dumps(report.raw))
+    raw["timeline"][1]["start_s"] = raw["timeline"][0]["start_s"] - 1
+    problems = pipeline.check_consistency(
+        pipeline.Timeline(raw=raw, source=report.source, digest=report.digest)
+    )
+    assert any("before the scene before it ended" in problem for problem in problems)
+
+
+def test_headers_that_disagree_with_the_list_are_caught() -> None:
+    report = committed()
+    raw = json.loads(json.dumps(report.raw))
+    raw["scenes"] = 3
+    raw["segments"] = 9
+    raw["duration_s"] = 12.0
+    raw["agreement"] = {**raw["agreement"], "scenes": 1, "share": 0.5}
+    problems = pipeline.check_consistency(
+        pipeline.Timeline(raw=raw, source=report.source, digest=report.digest)
+    )
+    assert len(problems) == 5
+
+
+def test_an_empty_record_is_refused() -> None:
+    report = committed()
+    empty = pipeline.Timeline(raw={**report.raw, "timeline": []}, source=report.source, digest="")
+    assert pipeline.check_consistency(empty) == ["the record carries no scenes"]
+
+
+def test_a_record_whose_scenes_do_not_regroup_out_of_the_transcript_is_caught() -> None:
+    """The check that stops a timeline describing a recording it was not built from."""
+    report = committed()
+    raw = {**json.loads(json.dumps(report.raw)), "gap_seconds": 5.0}
+    problems = pipeline.check_consistency(
+        pipeline.Timeline(raw=raw, source=report.source, digest=report.digest), transcript()
+    )
+    assert any("regroups into" in problem for problem in problems)
+
+
+def test_a_scene_starting_somewhere_the_transcript_does_not_is_caught() -> None:
+    problems = pipeline.check_consistency(broken(start_s=7.0), transcript())
+    assert any("does not start where the transcript does" in problem for problem in problems)
+
+
+# --- the table and the CSV ----------------------------------------------------
+
+
+def test_the_table_joins_the_record_back_to_the_transcript() -> None:
+    rows = pipeline.table(committed(), transcript())
+    assert len(rows) == 47
+    assert rows[0]["text"].startswith("Козацкая")
+    assert all(row["text"] for row in rows)
+
+
+def test_the_table_refuses_a_transcript_that_does_not_match() -> None:
+    with pytest.raises(ValueError, match="against 47 in the record"):
+        pipeline.table(committed(), transcript()[:10])
+
+
+def test_the_csv_carries_both_predictions_and_both_confidences(tmp_path: Path) -> None:
+    written = pipeline.write_csv(pipeline.table(committed(), transcript()), tmp_path / "t.csv")
+    header = written.read_text(encoding="utf-8").splitlines()[0]
+    assert header.split(",") == list(pipeline.CSV_COLUMNS)
+    for column in ("emotion", "confidence", "second_opinion", "second_confidence", "agreed"):
+        assert column in header
+
+
+def test_the_committed_csv_matches_the_committed_record(tmp_path: Path) -> None:
+    fresh = pipeline.write_csv(pipeline.table(committed(), transcript()), tmp_path / "t.csv")
+    assert fresh.read_bytes() == (ROOT / "benchmarks" / "pipeline" / "timeline.csv").read_bytes()
+
+
+def test_describe_names_the_two_models_and_the_agreement() -> None:
+    out = "\n".join(pipeline.describe(committed()))
+    assert "47 scenes" in out and "1s silence gap" in out
+    assert "ruBERT" in out and "translate" in out
+    assert "agree on 23 of 47" in out
+    assert "not an accuracy" in out
+
+
+# --- the figure ---------------------------------------------------------------
+
+
+def test_the_figure_renders_and_is_stamped_with_the_record(tmp_path: Path) -> None:
+    from emotion_timeline import figures as shared
+    from emotion_timeline.pipeline import figures as pipeline_figures
+
+    written = pipeline_figures.render_all(committed(), tmp_path)
+    assert len(written) == len(pipeline_figures.FIGURES)
+    assert shared.read_stamp(written[0]) == committed().digest
+
+
+def test_the_committed_figure_is_current() -> None:
+    from emotion_timeline.pipeline import figures as pipeline_figures
+
+    assert pipeline_figures.check_figures_current(committed(), ROOT / "assets") == []
+
+
+def test_every_emotion_has_a_colour() -> None:
+    from emotion_timeline import figures as shared
+
+    assert set(shared.EMOTION_COLOURS) == set(EMOTIONS)

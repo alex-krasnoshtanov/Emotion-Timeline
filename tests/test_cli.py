@@ -98,6 +98,43 @@ def test_errors_prints_the_headline_and_the_hardest_classes(
     assert "ALL-CAPS word" in out
 
 
+# --- timeline ----------------------------------------------------------------
+
+
+def test_timeline_prints_the_scene_breakdown_and_the_agreement(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert cli.main(["timeline", "--out", str(tmp_path / "t.csv"), "--assets", str(tmp_path)]) == 0
+    out = capsys.readouterr().out
+    assert "316 segments over 51.6 minutes" in out
+    assert "47 scenes at a 1s silence gap" in out
+    # The headline of the chapter: a documentary narration is mostly Neutral.
+    assert "Neutral   32  68.1%" in out
+    assert "agree on 23 of 47 scenes (48.9%)" in out
+    assert "not an accuracy" in out
+
+
+def test_timeline_writes_the_table_and_the_picture(tmp_path: Path) -> None:
+    assert cli.main(["timeline", "--out", str(tmp_path / "t.csv"), "--assets", str(tmp_path)]) == 0
+    assert (tmp_path / "t.csv").exists()
+    assert (tmp_path / "emotion-timeline.png").exists()
+
+
+def test_timeline_refuses_a_record_that_does_not_match_its_transcript(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The record carries no text, so this is the check that ties it to a recording."""
+    from emotion_timeline.pipeline import timeline as pipeline
+
+    raw = json.loads(Path(pipeline.DEFAULT_TIMELINE).read_text(encoding="utf-8"))
+    raw["gap_seconds"] = 5.0
+    broken = tmp_path / "broken.json"
+    broken.write_text(json.dumps(raw), encoding="utf-8")
+
+    assert cli.main(["timeline", "--record", str(broken), "--assets", str(tmp_path)]) == 1
+    assert "inconsistent timeline" in capsys.readouterr().err
+
+
 # --- figures -----------------------------------------------------------------
 
 
@@ -106,6 +143,7 @@ def all_figures() -> set[str]:
     from emotion_timeline.analysis import error_analysis as ea
     from emotion_timeline.data import figures as ds_figures
     from emotion_timeline.model import figures as model_figures
+    from emotion_timeline.pipeline import figures as pipeline_figures
     from emotion_timeline.russian import figures as russian_figures
     from emotion_timeline.selection import figures as sel_figures
     from emotion_timeline.training import figures as training_figures
@@ -117,6 +155,7 @@ def all_figures() -> set[str]:
         | set(model_figures.FIGURES)
         | set(training_figures.FIGURES)
         | set(russian_figures.FIGURES)
+        | set(pipeline_figures.FIGURES)
     )
 
 

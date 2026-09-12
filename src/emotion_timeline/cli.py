@@ -17,6 +17,11 @@ if TYPE_CHECKING:  # pandas is imported inside the functions that need it
 
 BENCHMARKS = Path(__file__).resolve().parents[2] / "benchmarks"
 RU_RECORD = BENCHMARKS / "russian" / "build-record.json"
+TIMELINE = BENCHMARKS / "pipeline" / "timeline.json"
+SEGMENTS = BENCHMARKS / "stt" / "assemblyai-best.csv"
+
+#: Re-exported so `--help` shows the default the module documents.
+GAP_SECONDS = 1.0
 
 
 def parse_timestamp(text: str) -> float:
@@ -98,6 +103,8 @@ def _stages(args: argparse.Namespace) -> list[tuple[str, Any, Any, Any]]:
     from emotion_timeline.data import figures as dataset_figures
     from emotion_timeline.model import card as model_card
     from emotion_timeline.model import figures as model_figures
+    from emotion_timeline.pipeline import figures as pipeline_figures
+    from emotion_timeline.pipeline import timeline as pipeline_timeline
     from emotion_timeline.russian import compare as russian_compare
     from emotion_timeline.russian import figures as russian_figures
     from emotion_timeline.selection import figures as selection_figures
@@ -141,6 +148,12 @@ def _stages(args: argparse.Namespace) -> list[tuple[str, Any, Any, Any]]:
             russian_compare.Comparison.load(args.comparison),
             russian_figures.FIGURES,
             russian_compare.check_consistency,
+        ),
+        (
+            "pipeline",
+            pipeline_timeline.Timeline.load(args.timeline),
+            pipeline_figures.FIGURES,
+            pipeline_timeline.check_consistency,
         ),
     ]
 
@@ -745,6 +758,103 @@ def cmd_compare_russian(args: argparse.Namespace) -> int:  # pragma: no cover - 
     return 0
 
 
+def cmd_score_timeline(args: argparse.Namespace) -> int:  # pragma: no cover - runs two models
+    """Score every segment with both models and write the timeline record."""
+    import json
+
+    import numpy as np
+
+    from emotion_timeline.pipeline import timeline as pipeline
+    from emotion_timeline.russian import baselines, translate
+    from emotion_timeline.training import evaluate, run
+
+    segments = pipeline.read_segments(args.segments)
+    scenes = pipeline.group(segments, args.gap)
+    texts = [segment.text for segment in segments]
+    print(f"{len(segments):,} segments -> {len(scenes)} scenes at a {args.gap:g}s gap")
+
+    comparison = json.loads(Path(args.comparison).read_text(encoding="utf-8"))
+    blocks = comparison["approaches"]
+    a_name, b_name = comparison["pair"]
+
+    print(f"B: {args.rubert}")
+    b_raw, _ = baselines.predict(args.rubert, texts, multi_label=False)
+    print(f"A: {translate.MODEL} -> {args.weights}")
+    english = translate.translate(texts, progress=print)
+    a_raw, _ = baselines.predict(args.weights, english, multi_label=False)
+
+    # The temperatures were fitted on each model's own validation rows in stage
+    # 8. Refitting them here is impossible -- a documentary has no labels -- and
+    # reusing them is the entire reason they were recorded.
+    def calibrate(raw: np.ndarray, block: dict[str, Any]) -> np.ndarray:
+        scaled: np.ndarray = evaluate.softmax(
+            np.log(np.clip(raw, 1e-12, None)), float(block["temperature"])
+        )
+        return scaled
+
+    record = pipeline.build_record(
+        scenes,
+        calibrate(b_raw, blocks[b_name]),
+        calibrate(a_raw, blocks[a_name]),
+        source=pipeline.relative(args.segments),
+        gap=args.gap,
+        primary_model={
+            "name": b_name,
+            "model": args.rubert,
+            "temperature": blocks[b_name]["temperature"],
+            "held_out_accuracy": blocks[b_name]["accuracy"],
+        },
+        second_model={
+            "name": a_name,
+            "model": f"{translate.MODEL} + {args.weights}",
+            "temperature": blocks[a_name]["temperature"],
+            "held_out_accuracy": blocks[a_name]["accuracy"],
+        },
+        agreement={
+            "held_out_accuracy_where_they_agreed": comparison["combinations"]["agreement filter"][
+                "accuracy"
+            ],
+            "measured_on": "the held-out ru-izard split, which is social-media register",
+            "caveat": (
+                "agreement here is a consistency signal, not an accuracy: this "
+                "recording has no labels, and two models can agree and both be wrong"
+            ),
+        },
+    )
+    written = run.write_record(record, args.out)
+    print()
+    for line in pipeline.describe(pipeline.Timeline.load(written)):
+        print(line)
+    print()
+    print(f"wrote {written}")
+    return 0
+
+
+def cmd_timeline(args: argparse.Namespace) -> int:
+    """The per-scene emotion timeline, as a table and as a picture."""
+    from emotion_timeline.pipeline import figures as pipeline_figures
+    from emotion_timeline.pipeline import timeline as pipeline
+
+    report = pipeline.Timeline.load(args.record)
+    segments = pipeline.read_segments(args.segments)
+    problems = pipeline.check_consistency(report, segments)
+    for problem in problems:
+        print(f"inconsistent timeline: {problem}", file=sys.stderr)
+    if problems:
+        return 1
+
+    for line in pipeline.describe(report):
+        print(line)
+
+    written = pipeline.write_csv(pipeline.table(report, segments), args.out)
+    drawn = pipeline_figures.render_all(report, args.assets)
+    print()
+    print(f"wrote {written}")
+    for path in drawn:
+        print(f"wrote {path}")
+    return 0
+
+
 def cmd_model(args: argparse.Namespace) -> int:
     """What the two surviving records of the trained classifier can support."""
     from emotion_timeline.model.card import (
@@ -1075,6 +1185,46 @@ def build_parser() -> argparse.ArgumentParser:
     )
     compare_russian_parser.set_defaults(func=cmd_compare_russian)
 
+    score_timeline_parser = sub.add_parser(
+        "score-timeline",
+        help="run both models over a transcript and write the timeline record "
+        "(needs --extra model)",
+        description=(
+            "Groups a segment CSV into scenes by silence, scores every segment "
+            "with the native Russian model and with the translation path, "
+            "applies each model's fitted temperature, and writes the record."
+        ),
+    )
+    score_timeline_parser.add_argument("--segments", default=str(SEGMENTS))
+    score_timeline_parser.add_argument(
+        "--gap",
+        type=float,
+        default=GAP_SECONDS,
+        help="silence longer than this starts a new scene (seconds)",
+    )
+    score_timeline_parser.add_argument("--weights", default="models/distilbert-v1")
+    score_timeline_parser.add_argument("--rubert", default="models/rubert-v1")
+    score_timeline_parser.add_argument(
+        "--comparison", default=str(BENCHMARKS / "russian" / "comparison.json")
+    )
+    score_timeline_parser.add_argument("--out", default=str(TIMELINE))
+    score_timeline_parser.set_defaults(func=cmd_score_timeline)
+
+    timeline_parser = sub.add_parser(
+        "timeline",
+        help="the per-scene emotion timeline over the committed transcript",
+        description=(
+            "Reads the committed timeline record, joins it back to the "
+            "transcript it was built from, and writes the table and the figure. "
+            "No network, no model, no key."
+        ),
+    )
+    timeline_parser.add_argument("--record", default=str(TIMELINE))
+    timeline_parser.add_argument("--segments", default=str(SEGMENTS))
+    timeline_parser.add_argument("--out", default=str(BENCHMARKS / "pipeline" / "timeline.csv"))
+    timeline_parser.add_argument("--assets", default="assets", help="where the figure goes")
+    timeline_parser.set_defaults(func=cmd_timeline)
+
     errors_parser = sub.add_parser(
         "errors",
         help="summarise where the emotion classifier goes wrong",
@@ -1112,6 +1262,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--comparison", default=str(BENCHMARKS / "russian" / "comparison.json")
     )
     add_selection_arguments(figures_parser)
+    figures_parser.add_argument("--timeline", default=str(TIMELINE))
     figures_parser.add_argument("--out", default="assets", help="output directory")
     figures_parser.add_argument(
         "--check",

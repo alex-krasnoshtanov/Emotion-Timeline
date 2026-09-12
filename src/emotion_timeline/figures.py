@@ -34,6 +34,19 @@ WRONG = "#ab2f27"
 RIGHT = "#2a6a46"
 ACCENT = "#0d6a70"
 
+# One colour per emotion, so a reader who learns the timeline's key can read it
+# anywhere else the seven classes are drawn. Neutral borrows MUTED and Surprise
+# ACCENT deliberately: the two are the background against which the rest reads.
+EMOTION_COLOURS = {
+    "Anger": "#ab2f27",
+    "Disgust": "#7a6a1f",
+    "Fear": "#5b4b8a",
+    "Joy": "#c98a1e",
+    "Neutral": "#6b7a7d",
+    "Sadness": "#2f5d8a",
+    "Surprise": "#0d6a70",
+}
+
 STAMP_KEY = "Source-SHA256"
 
 # A figure function takes the stage's report and a destination, and returns the
