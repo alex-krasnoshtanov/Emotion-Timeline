@@ -288,6 +288,55 @@ def cmd_build_dataset(args: argparse.Namespace) -> int:
     return 0
 
 
+def _read_dataset(path: str) -> tuple[list[str], list[str], list[str]]:
+    """Read a rebuilt dataset CSV into the three columns the split is keyed on."""
+    import pandas as pd
+
+    frame = pd.read_csv(path)
+    missing = {"text", "label", "source"} - set(frame.columns)
+    if missing:
+        raise SystemExit(f"{path} is missing {sorted(missing)}")
+    return (
+        [str(value) for value in frame["text"]],
+        [str(value) for value in frame["label"]],
+        [str(value) for value in frame["source"]],
+    )
+
+
+def cmd_split(args: argparse.Namespace) -> int:
+    """The committed split: what it holds, and whether a rebuilt dataset still gives it."""
+    from emotion_timeline.training import splits
+
+    if args.write:
+        texts, labels, sources = _read_dataset(args.write)
+        written = splits.write_manifest(
+            splits.build_manifest(texts, labels, sources), args.manifest
+        )
+        print(f"wrote {written}")
+
+    manifest = splits.SplitManifest.load(args.manifest)
+    problems = splits.check_consistency(manifest)
+    for problem in problems:
+        print(f"inconsistent record: {problem}", file=sys.stderr)
+    if problems:
+        return 1
+
+    for line in splits.describe(manifest):
+        print(line)
+
+    if args.verify:
+        texts, labels, sources = _read_dataset(args.verify)
+        differences = splits.verify(manifest, texts, labels, sources)
+        print()
+        for difference in differences:
+            print(f"differs from the record: {difference}", file=sys.stderr)
+        if differences:
+            print(f"{args.verify} does not give the committed split", file=sys.stderr)
+            return 1
+        print(f"  {args.verify} reproduces every split exactly")
+    return 0
+
+
 def cmd_model(args: argparse.Namespace) -> int:
     """What the two surviving records of the trained classifier can support."""
     from emotion_timeline.model.card import (
@@ -453,6 +502,22 @@ def build_parser() -> argparse.ArgumentParser:
     )
     build_dataset_parser.add_argument("--cache", help="dataset download cache directory")
     build_dataset_parser.set_defaults(func=cmd_build_dataset)
+
+    split_parser = sub.add_parser(
+        "split",
+        help="the committed train/validation/test split, and how to check it",
+        description=(
+            "Prints the split the fine-tune trains on. No rows are committed, so "
+            "membership is pinned by a digest per split: --verify recomputes those "
+            "from a rebuilt dataset, and --write regenerates the record from one."
+        ),
+    )
+    split_parser.add_argument(
+        "--manifest", default=str(BENCHMARKS / "training" / "split-manifest.json")
+    )
+    split_parser.add_argument("--verify", help="recompute the split from this rebuilt CSV")
+    split_parser.add_argument("--write", help="regenerate the manifest from this rebuilt CSV")
+    split_parser.set_defaults(func=cmd_split)
 
     errors_parser = sub.add_parser(
         "errors",

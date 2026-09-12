@@ -340,3 +340,68 @@ def test_model_refuses_an_inconsistent_record(
 
     assert cli.main(["model", "--card-metrics", str(record)]) == 1
     assert "inconsistent record" in capsys.readouterr().err
+
+
+# --- split -------------------------------------------------------------------
+
+
+def test_split_prints_the_committed_split(capsys: pytest.CaptureFixture[str]) -> None:
+    assert cli.main(["split"]) == 0
+    out = capsys.readouterr().out
+    assert "419,180 rows, split 70% / 15% / 15%" in out
+    assert any(line.strip().startswith("test") and "62,877" in line for line in out.splitlines())
+    assert "185 held-out rows share their text with a training row" in out
+
+
+def test_split_refuses_an_inconsistent_manifest(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from emotion_timeline.training import splits
+
+    raw = json.loads(Path(splits.DEFAULT_MANIFEST).read_text(encoding="utf-8"))
+    raw["source_rows"] = 3
+    manifest = tmp_path / "broken.json"
+    manifest.write_text(json.dumps(raw), encoding="utf-8")
+
+    assert cli.main(["split", "--manifest", str(manifest)]) == 1
+    assert "inconsistent record" in capsys.readouterr().err
+
+
+def test_split_writes_and_then_verifies_a_dataset(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The whole round trip, on sixty rows rather than 419,180."""
+    dataset = tmp_path / "tiny.csv"
+    rows = ["text,label,source"]
+    rows += [f"row {index},a,test" for index in range(40)]
+    rows += [f"row {index},b,test" for index in range(40, 60)]
+    dataset.write_text("\n".join(rows) + "\n", encoding="utf-8")
+    manifest = tmp_path / "manifest.json"
+
+    assert cli.main(["split", "--manifest", str(manifest), "--write", str(dataset)]) == 0
+    assert cli.main(["split", "--manifest", str(manifest), "--verify", str(dataset)]) == 0
+    assert "reproduces every split exactly" in capsys.readouterr().out
+
+
+def test_split_reports_a_dataset_that_no_longer_gives_the_record(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    dataset = tmp_path / "tiny.csv"
+    header = "text,label,source"
+    rows = [f"row {index},a,test" for index in range(20)]
+    dataset.write_text("\n".join([header, *rows]) + "\n", encoding="utf-8")
+    manifest = tmp_path / "manifest.json"
+    assert cli.main(["split", "--manifest", str(manifest), "--write", str(dataset)]) == 0
+
+    changed = tmp_path / "changed.csv"
+    rows[0] = "something else,a,test"
+    changed.write_text("\n".join([header, *rows]) + "\n", encoding="utf-8")
+    assert cli.main(["split", "--manifest", str(manifest), "--verify", str(changed)]) == 1
+    assert "does not give the committed split" in capsys.readouterr().err
+
+
+def test_split_rejects_a_csv_missing_a_column(tmp_path: Path) -> None:
+    dataset = tmp_path / "wrong.csv"
+    dataset.write_text("text,label\nhello,a\n", encoding="utf-8")
+    with pytest.raises(SystemExit, match="source"):
+        cli.main(["split", "--verify", str(dataset)])

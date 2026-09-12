@@ -1,0 +1,72 @@
+{
+  "_comment": [
+    "How the rebuilt dataset is divided for training, and how anyone can check it.",
+    "Written by `emotion-timeline split --write` over the rows that",
+    "`build-dataset` reproduces. No row is recorded here: each split carries a",
+    "SHA-256 over its sorted row keys instead, and a row key is the SHA-256 of the",
+    "row's own text, label and source under the seed below. `split --verify`",
+    "recomputes both from a rebuilt CSV and refuses to agree if either differs.",
+    "The held-out set is 62,877 rows, which is not the 64,250 the model card",
+    "reports on: the difference is the 15% share of the 9,151 synthetic Disgust",
+    "rows that did not survive. Five of the seven per-class supports match the",
+    "card's exactly all the same. See docs/dataset.md and docs/fine-tune.md."
+  ],
+  "seed": 20251115,
+  "held_out_fraction": 0.15,
+  "allocation": "largest remainder, ties broken by class name",
+  "source_rows": 419180,
+  "class_counts": {
+    "Anger": 57963,
+    "Disgust": 5165,
+    "Fear": 53351,
+    "Joy": 147869,
+    "Neutral": 13401,
+    "Sadness": 125615,
+    "Surprise": 15816
+  },
+  "splits": {
+    "train": {
+      "rows": 293426,
+      "class_counts": {
+        "Anger": 40573,
+        "Disgust": 3615,
+        "Fear": 37345,
+        "Joy": 103509,
+        "Neutral": 9381,
+        "Sadness": 87931,
+        "Surprise": 11072
+      },
+      "membership_sha256": "0d00c8ca0b593b031dc81f656ed81d86711c5f763a37567eff4f09bff2a10a02"
+    },
+    "validation": {
+      "rows": 62877,
+      "class_counts": {
+        "Anger": 8695,
+        "Disgust": 775,
+        "Fear": 8003,
+        "Joy": 22180,
+        "Neutral": 2010,
+        "Sadness": 18842,
+        "Surprise": 2372
+      },
+      "membership_sha256": "87f6939daf648a026994997e82e3e1fc4c2d0ca143448a58ff01abdd4827ace1"
+    },
+    "test": {
+      "rows": 62877,
+      "class_counts": {
+        "Anger": 8695,
+        "Disgust": 775,
+        "Fear": 8003,
+        "Joy": 22180,
+        "Neutral": 2010,
+        "Sadness": 18842,
+        "Surprise": 2372
+      },
+      "membership_sha256": "fdf5aa6232676c5adda4d6298ffc91f9008d6e5bc6645bc1fe16f5e55480b15e"
+    }
+  },
+  "text_overlap": {
+    "held_out_rows_sharing_a_training_text": 185,
+    "of_those_labelled_differently": 75
+  }
+}
