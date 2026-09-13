@@ -93,6 +93,7 @@ src/emotion_timeline/
   training/           the split, the fine-tune, the evaluation and its records
   russian/            the four Russian approaches, and whether combining helps
   pipeline/           scenes from silences, and the timeline over them
+  web/                the local FastAPI page, and the job it runs
   figures.py          palette, styling and the staleness stamp, shared
   cli.py              one subcommand per stage
 docs/                 one chapter per stage, each ending in what it does NOT show
@@ -117,6 +118,7 @@ uv run emotion-timeline model                     # the trained classifier's two
 uv run emotion-timeline errors                    # where the classifier fails
 uv run emotion-timeline russian                   # translate or classify natively
 uv run emotion-timeline timeline                  # the per-scene emotion timeline
+uv run emotion-timeline serve                     # the pipeline in a browser
 uv run emotion-timeline figures --out assets      # regenerate every figure, every stage
 
 uv sync --extra data && uv run emotion-timeline build-dataset   # rerun the build

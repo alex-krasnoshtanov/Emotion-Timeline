@@ -807,71 +807,19 @@ def cmd_transcribe(args: argparse.Namespace) -> int:  # pragma: no cover - needs
 
 def cmd_score_timeline(args: argparse.Namespace) -> int:  # pragma: no cover - runs two models
     """Score every segment with both models and write the timeline record."""
-    import json
-
-    import numpy as np
-
+    from emotion_timeline.pipeline import score as scoring
     from emotion_timeline.pipeline import timeline as pipeline
-    from emotion_timeline.russian import baselines, translate
-    from emotion_timeline.training import evaluate, run
+    from emotion_timeline.training import run
 
-    segments = pipeline.read_segments(args.segments)
-    scenes = pipeline.group(segments, args.gap)
-    pieces = pipeline.chunks(scenes, args.chunk_chars)
-    texts = [piece.text for piece in pieces]
-    print(
-        f"{len(segments):,} segments -> {len(scenes)} scenes at a {args.gap:g}s gap "
-        f"-> {len(pieces)} chunks of at most {args.chunk_chars} characters"
-    )
-
-    comparison = json.loads(Path(args.comparison).read_text(encoding="utf-8"))
-    blocks = comparison["approaches"]
-    a_name, b_name = comparison["pair"]
-
-    print(f"B: {args.rubert}")
-    b_raw, _ = baselines.predict(args.rubert, texts, multi_label=False)
-    print(f"A: {translate.MODEL} -> {args.weights}")
-    english = translate.translate(texts, progress=print)
-    a_raw, _ = baselines.predict(args.weights, english, multi_label=False)
-
-    # The temperatures were fitted on each model's own validation rows in stage
-    # 8. Refitting them here is impossible -- a documentary has no labels -- and
-    # reusing them is the entire reason they were recorded.
-    def calibrate(raw: np.ndarray, block: dict[str, Any]) -> np.ndarray:
-        scaled: np.ndarray = evaluate.softmax(
-            np.log(np.clip(raw, 1e-12, None)), float(block["temperature"])
-        )
-        return scaled
-
-    record = pipeline.build_record(
-        scenes,
-        pieces,
-        calibrate(b_raw, blocks[b_name]),
-        calibrate(a_raw, blocks[a_name]),
+    record = scoring.score(
+        pipeline.read_segments(args.segments),
         source=pipeline.relative(args.segments),
         gap=args.gap,
-        primary_model={
-            "name": b_name,
-            "model": args.rubert,
-            "temperature": blocks[b_name]["temperature"],
-            "held_out_accuracy": blocks[b_name]["accuracy"],
-        },
-        second_model={
-            "name": a_name,
-            "model": f"{translate.MODEL} + {args.weights}",
-            "temperature": blocks[a_name]["temperature"],
-            "held_out_accuracy": blocks[a_name]["accuracy"],
-        },
-        agreement={
-            "held_out_accuracy_where_they_agreed": comparison["combinations"]["agreement filter"][
-                "accuracy"
-            ],
-            "measured_on": "the held-out ru-izard split, which is social-media register",
-            "caveat": (
-                "agreement here is a consistency signal, not an accuracy: this "
-                "recording has no labels, and two models can agree and both be wrong"
-            ),
-        },
+        chunk_chars=args.chunk_chars,
+        weights=args.weights,
+        rubert=args.rubert,
+        comparison=args.comparison,
+        progress=print,
     )
     written = run.write_record(record, args.out)
     print()
@@ -982,6 +930,16 @@ def cmd_translation_cost(args: argparse.Namespace) -> int:  # pragma: no cover -
         print(line)
     print()
     print(f"wrote {written}")
+    return 0
+
+
+def cmd_serve(args: argparse.Namespace) -> int:  # pragma: no cover - starts a server
+    """Open the pipeline in a browser."""
+    from emotion_timeline.web import app as web
+
+    print(f"emotion-timeline on http://{args.host}:{args.port}")
+    print("  a link or a file goes in; the committed example needs no GPU")
+    web.serve(host=args.host, port=args.port, downloads=args.downloads)
     return 0
 
 
@@ -1412,6 +1370,20 @@ def build_parser() -> argparse.ArgumentParser:
         "--out", default=str(BENCHMARKS / "russian" / "translation-cost.json")
     )
     translation_cost_parser.set_defaults(func=cmd_translation_cost)
+
+    serve_parser = sub.add_parser(
+        "serve",
+        help="open the pipeline in a browser (needs --extra web, and stt+model to run one)",
+        description=(
+            "A local page that takes a link or a file and draws the timeline. "
+            "Binds to loopback: it hands URLs to yt-dlp and files to ffmpeg, so "
+            "it is a tool you run for yourself rather than a service to expose."
+        ),
+    )
+    serve_parser.add_argument("--host", default="127.0.0.1")
+    serve_parser.add_argument("--port", type=int, default=8000)
+    serve_parser.add_argument("--downloads", default="downloads")
+    serve_parser.set_defaults(func=cmd_serve)
 
     errors_parser = sub.add_parser(
         "errors",

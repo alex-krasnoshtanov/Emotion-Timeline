@@ -205,6 +205,62 @@ thirty seconds, so a recording that opens on music or a title card can come back
 as the wrong language and transcribe into it without complaining. `--no-vad` is
 worth trying on anything with a score under the narration, for the reason above.
 
+## The browser front end
+
+```bash
+uv sync --extra web --extra stt --extra model
+uv run emotion-timeline serve            # http://127.0.0.1:8000
+```
+
+A link or a file goes in the box, the page polls while Whisper and the two
+classifiers work, and the timeline comes back with the transcript beside it. It
+is the same code the commands run — `pipeline/score.py` is called by both, so the
+page and `timeline.csv` cannot drift apart.
+
+**It opens with no GPU and no network.** *Load the committed example* serves the
+47-scene timeline from `benchmarks/`, which is what makes the interface testable:
+`tests/test_web.py` exercises every route without a model on the machine.
+
+**It binds to loopback, and that is not a default to change casually.** The page
+hands a URL to yt-dlp and a file to ffmpeg, so anyone who can reach the port can
+make this machine fetch a URL of their choosing. Three checks sit on that
+boundary — the link has to be `http`/`https`, the upload has to carry a media
+extension and stay under 512 MB, and the uploaded *filename is never used as a
+path*: the extension is taken and the name is generated. Each of those has a test
+named after the thing it refuses.
+
+The scene gap and the voice-activity filter are both on the page, because the
+[VAD finding](#the-voice-activity-filter-drops-narration-over-music) means the
+right setting depends on the recording.
+
+## The browser front end
+
+```bash
+uv sync --extra web --extra stt --extra model
+uv run emotion-timeline serve            # http://127.0.0.1:8000
+```
+
+A link or a file goes in the box, the page polls while Whisper and the two
+classifiers work, and the timeline comes back with the transcript beside it. It
+is the same code the commands run — `pipeline/score.py` is called by both, so the
+page and `timeline.csv` cannot drift apart.
+
+**It opens with no GPU and no network.** *Load the committed example* serves the
+47-scene timeline from `benchmarks/`, which is what makes the interface testable:
+`tests/test_web.py` exercises every route without a model on the machine.
+
+**It binds to loopback, and that is not a default to change casually.** The page
+hands a URL to yt-dlp and a file to ffmpeg, so anyone who can reach the port can
+make this machine fetch a URL of their choosing. Three checks sit on that
+boundary — the link has to be `http`/`https`, the upload has to carry a media
+extension and stay under 512 MB, and the uploaded *filename is never used as a
+path*: the extension is taken and the name is generated. Each of those has a test
+named after the thing it refuses.
+
+The scene gap and the voice-activity filter are both on the page, because the
+[VAD finding](#the-voice-activity-filter-drops-narration-over-music) means the
+right setting depends on the recording.
+
 ## What this does not establish
 
 - **Not an accuracy.** There are no labels on this recording. 36.2% is a

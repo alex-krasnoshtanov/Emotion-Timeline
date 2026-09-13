@@ -1,0 +1,333 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Emotion Timeline</title>
+<style>
+  :root {
+    --ink: #1d2427; --muted: #6b7a7d; --grid: #dde4e3; --line: #c9d4d3;
+    --bg: #f7f9f9; --card: #ffffff; --accent: #0d6a70; --wrong: #ab2f27;
+    --radius: 10px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ink: #e7edec; --muted: #93a3a4; --grid: #2b3536; --line: #384445;
+      --bg: #151b1c; --card: #1c2425; --accent: #4fb3b8;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 15px/1.55 ui-sans-serif, system-ui, "Segoe UI", Roboto, sans-serif;
+  }
+  main { max-width: 1080px; margin: 0 auto; padding: 32px 20px 72px; }
+  h1 { font-size: 1.55rem; margin: 0 0 4px; letter-spacing: -0.01em; }
+  h2 { font-size: 1rem; margin: 28px 0 10px; text-transform: uppercase;
+       letter-spacing: 0.07em; color: var(--muted); font-weight: 600; }
+  .lede { color: var(--muted); margin: 0 0 24px; max-width: 62ch; }
+  .card { background: var(--card); border: 1px solid var(--line);
+          border-radius: var(--radius); padding: 18px; }
+  .tabs { display: flex; gap: 6px; margin-bottom: 14px; }
+  .tabs button {
+    flex: 0 0 auto; padding: 7px 16px; border-radius: 999px; cursor: pointer;
+    border: 1px solid var(--line); background: transparent; color: var(--muted);
+    font: inherit; font-size: 0.9rem;
+  }
+  .tabs button[aria-selected="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+  label { display: block; font-size: 0.85rem; color: var(--muted); margin-bottom: 5px; }
+  input[type=url], input[type=file], input[type=number] {
+    width: 100%; padding: 9px 11px; font: inherit; color: var(--ink);
+    background: var(--bg); border: 1px solid var(--line); border-radius: 7px;
+  }
+  .options { display: flex; gap: 18px; flex-wrap: wrap; align-items: end; margin-top: 14px; }
+  .options > div { flex: 0 1 160px; }
+  .check { display: flex; align-items: center; gap: 7px; font-size: 0.88rem; color: var(--muted); }
+  .check input { width: auto; }
+  .actions { display: flex; gap: 10px; align-items: center; margin-top: 18px; flex-wrap: wrap; }
+  button.run, button.ghost {
+    padding: 10px 20px; border-radius: 8px; font: inherit; font-weight: 600; cursor: pointer;
+  }
+  button.run { background: var(--accent); color: #fff; border: 1px solid var(--accent); }
+  button.ghost { background: transparent; color: var(--accent); border: 1px solid var(--line); }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  .note { font-size: 0.83rem; color: var(--muted); }
+  #status { margin-top: 18px; display: none; }
+  #status.on { display: block; }
+  .state { font-weight: 600; text-transform: capitalize; }
+  .state.failed { color: var(--wrong); }
+  pre.log {
+    margin: 10px 0 0; padding: 11px 13px; max-height: 190px; overflow: auto;
+    background: var(--bg); border: 1px solid var(--line); border-radius: 7px;
+    font: 12px/1.5 ui-monospace, SFMono-Regular, Consolas, monospace; color: var(--muted);
+    white-space: pre-wrap;
+  }
+  #results { display: none; }
+  #results.on { display: block; }
+  .stats { display: flex; flex-wrap: wrap; gap: 26px; margin-bottom: 8px; }
+  .stat b { display: block; font-size: 1.35rem; font-variant-numeric: tabular-nums; }
+  .stat span { font-size: 0.8rem; color: var(--muted); }
+  .scroll { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.88rem; }
+  th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--grid); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; font-size: 0.78rem;
+       text-transform: uppercase; letter-spacing: 0.05em; }
+  td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .chip { display: inline-block; padding: 1px 9px; border-radius: 999px;
+          color: #fff; font-size: 0.78rem; font-weight: 600; }
+  .split { color: var(--muted); font-size: 0.8rem; }
+  .caveat { border-left: 3px solid var(--accent); padding: 2px 0 2px 13px;
+            color: var(--muted); font-size: 0.87rem; margin: 16px 0 0; max-width: 70ch; }
+  .err { color: var(--wrong); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Emotion Timeline</h1>
+  <p class="lede">
+    A Russian-language video in, a per-scene emotion timeline out. Two models read
+    every scene &mdash; one native Russian, one via translation &mdash; and a scene the
+    two disagree on is drawn faded, because with no labels on your video that is the
+    only honest thing this can tell you about which parts to trust.
+  </p>
+
+  <div class="card">
+    <div class="tabs" role="tablist">
+      <button id="tab-link" role="tab" aria-selected="true">From a link</button>
+      <button id="tab-file" role="tab" aria-selected="false">From a file</button>
+    </div>
+
+    <div id="pane-link">
+      <label for="url">Video or audio URL</label>
+      <input type="url" id="url" placeholder="https://www.youtube.com/watch?v=…" autocomplete="off">
+    </div>
+    <div id="pane-file" hidden>
+      <label for="file">Audio or video file</label>
+      <input type="file" id="file" accept="audio/*,video/*">
+    </div>
+
+    <div class="options">
+      <div>
+        <label for="gap">Scene gap (s)</label>
+        <input type="number" id="gap" value="1" min="0" max="60" step="0.5">
+      </div>
+      <label class="check"><input type="checkbox" id="vad" checked> Voice-activity filter</label>
+    </div>
+    <p class="note" style="margin:8px 0 0">
+      The filter stops Whisper hallucinating over silence, and on a documentary with
+      music under the narration it drops speech. Turn it off if the transcript has holes.
+    </p>
+
+    <div class="actions">
+      <button class="run" id="run">Run the pipeline</button>
+      <button class="ghost" id="demo">Load the committed example</button>
+      <span class="note" id="hint">First run downloads the models &mdash; several minutes.</span>
+    </div>
+  </div>
+
+  <div id="status" class="card">
+    <div>Status: <span class="state" id="state">queued</span> <span id="err" class="err"></span></div>
+    <pre class="log" id="log"></pre>
+  </div>
+
+  <div id="results">
+    <h2>The timeline</h2>
+    <div class="stats" id="stats"></div>
+    <div class="scroll"><svg id="chart" width="1040" height="300" role="img"
+      aria-label="Emotion against wall-clock time"></svg></div>
+    <p class="caveat" id="caveat"></p>
+
+    <h2>Scene by scene</h2>
+    <div class="scroll"><table>
+      <thead><tr><th>At</th><th>Emotion</th><th>Confidence</th><th>Second opinion</th><th>Transcript</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table></div>
+  </div>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const SVG = "http://www.w3.org/2000/svg";
+let META = null, POLL = null;
+
+const clock = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
+
+function setTab(which) {
+  const link = which === "link";
+  $("tab-link").setAttribute("aria-selected", link);
+  $("tab-file").setAttribute("aria-selected", !link);
+  $("pane-link").hidden = !link;
+  $("pane-file").hidden = link;
+}
+$("tab-link").onclick = () => setTab("link");
+$("tab-file").onclick = () => setTab("file");
+
+function showStatus(on) { $("status").classList.toggle("on", on); }
+
+function renderStatus(job) {
+  $("state").textContent = job.state;
+  $("state").className = "state " + job.state;
+  $("err").textContent = job.error || "";
+  $("log").textContent = job.log.join("\n");
+  $("log").scrollTop = $("log").scrollHeight;
+}
+
+function stat(value, label) {
+  return `<div class="stat"><b>${value}</b><span>${label}</span></div>`;
+}
+
+function renderChart(rows) {
+  const svg = $("chart");
+  svg.innerHTML = "";
+  const emotions = META.emotions;
+  const padL = 78, padR = 14, padT = 12, rowH = 26, stripH = 54;
+  const width = svg.viewBox.baseVal?.width || 1040;
+  const height = padT + emotions.length * rowH + stripH + 34;
+  svg.setAttribute("height", height);
+  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+
+  const start = rows[0].start_s, end = rows[rows.length - 1].end_s;
+  const span = Math.max(end - start, 1);
+  const x = (t) => padL + ((t - start) / span) * (width - padL - padR);
+
+  emotions.forEach((name, i) => {
+    const y = padT + i * rowH;
+    const label = document.createElementNS(SVG, "text");
+    label.setAttribute("x", padL - 10); label.setAttribute("y", y + rowH / 2 + 4);
+    label.setAttribute("text-anchor", "end"); label.setAttribute("font-size", "12");
+    label.setAttribute("fill", "currentColor"); label.setAttribute("opacity", "0.65");
+    label.textContent = name;
+    svg.appendChild(label);
+    const rule = document.createElementNS(SVG, "line");
+    rule.setAttribute("x1", padL); rule.setAttribute("x2", width - padR);
+    rule.setAttribute("y1", y + rowH / 2); rule.setAttribute("y2", y + rowH / 2);
+    rule.setAttribute("stroke", "currentColor"); rule.setAttribute("opacity", "0.12");
+    svg.appendChild(rule);
+  });
+
+  rows.forEach((row) => {
+    const i = emotions.indexOf(row.emotion);
+    const bar = document.createElementNS(SVG, "rect");
+    const w = Math.max(x(row.end_s) - x(row.start_s), 2);
+    bar.setAttribute("x", x(row.start_s));
+    bar.setAttribute("y", padT + i * rowH + 4);
+    bar.setAttribute("width", w);
+    bar.setAttribute("height", rowH - 8);
+    bar.setAttribute("rx", "2");
+    bar.setAttribute("fill", META.colours[row.emotion]);
+    if (!row.agreed) { bar.setAttribute("opacity", "0.55"); bar.setAttribute("stroke", "#fff"); bar.setAttribute("stroke-dasharray", "3 2"); }
+    const title = document.createElementNS(SVG, "title");
+    title.textContent = `${clock(row.start_s)} ${row.emotion} ${row.confidence.toFixed(3)}`
+      + (row.agreed ? " (both models agree)" : ` (second opinion: ${row.second_opinion})`);
+    bar.appendChild(title);
+    svg.appendChild(bar);
+  });
+
+  const base = padT + emotions.length * rowH + stripH;
+  rows.forEach((row) => {
+    const h = Math.max(row.confidence * (stripH - 12), 1);
+    const bar = document.createElementNS(SVG, "rect");
+    bar.setAttribute("x", x(row.start_s));
+    bar.setAttribute("y", base - h);
+    bar.setAttribute("width", Math.max(x(row.end_s) - x(row.start_s), 2));
+    bar.setAttribute("height", h);
+    bar.setAttribute("fill", "currentColor");
+    bar.setAttribute("opacity", "0.3");
+    svg.appendChild(bar);
+  });
+  const cap = document.createElementNS(SVG, "text");
+  cap.setAttribute("x", padL - 10); cap.setAttribute("y", base - 4);
+  cap.setAttribute("text-anchor", "end"); cap.setAttribute("font-size", "11");
+  cap.setAttribute("fill", "currentColor"); cap.setAttribute("opacity", "0.65");
+  cap.textContent = "confidence";
+  svg.appendChild(cap);
+
+  for (let k = 0; k <= 4; k++) {
+    const t = start + (span * k) / 4;
+    const tick = document.createElementNS(SVG, "text");
+    tick.setAttribute("x", x(t)); tick.setAttribute("y", height - 8);
+    tick.setAttribute("text-anchor", "middle"); tick.setAttribute("font-size", "11");
+    tick.setAttribute("fill", "currentColor"); tick.setAttribute("opacity", "0.6");
+    tick.textContent = clock(t);
+    svg.appendChild(tick);
+  }
+}
+
+function renderResult(payload) {
+  const rows = payload.timeline, header = payload.header;
+  const agreed = rows.filter((r) => r.agreed).length;
+  const confs = rows.map((r) => r.confidence).sort((a, b) => a - b);
+  $("stats").innerHTML =
+    stat(rows.length, "scenes")
+    + stat(clock(header.duration_s), "length")
+    + stat(`${((agreed / rows.length) * 100).toFixed(0)}%`, "the two models agree")
+    + stat(confs[Math.floor(confs.length / 2)].toFixed(3), "median confidence");
+  $("caveat").textContent = header.agreement?.caveat || META.caveat;
+  renderChart(rows);
+  $("rows").innerHTML = rows.map((r) => `
+    <tr>
+      <td class="num">${clock(r.start_s)}</td>
+      <td><span class="chip" style="background:${META.colours[r.emotion]}">${r.emotion}</span></td>
+      <td class="num">${r.confidence.toFixed(3)}</td>
+      <td class="split">${r.agreed ? "agrees" : r.second_opinion + " &mdash; disagrees"}</td>
+      <td>${r.text ? r.text.replace(/[<>&]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" }[c])) : ""}</td>
+    </tr>`).join("");
+  $("results").classList.add("on");
+}
+
+async function poll(id) {
+  const res = await fetch(`/api/jobs/${id}`);
+  const job = await res.json();
+  renderStatus(job);
+  if (!job.finished) return;
+  clearInterval(POLL); POLL = null;
+  $("run").disabled = false;
+  if (job.state === "done") {
+    const out = await fetch(`/api/jobs/${id}/timeline`);
+    renderResult(await out.json());
+  }
+}
+
+$("run").onclick = async () => {
+  const form = new FormData();
+  const isFile = $("tab-file").getAttribute("aria-selected") === "true";
+  if (isFile) {
+    if (!$("file").files[0]) { alert("Choose a file first."); return; }
+    form.append("file", $("file").files[0]);
+  } else {
+    form.append("url", $("url").value);
+  }
+  form.append("gap", $("gap").value);
+  form.append("vad", $("vad").checked ? "true" : "false");
+
+  $("run").disabled = true;
+  $("results").classList.remove("on");
+  showStatus(true);
+  renderStatus({ state: "queued", log: ["submitting"], error: null });
+
+  const res = await fetch("/api/jobs", { method: "POST", body: form });
+  const job = await res.json();
+  if (!res.ok) {
+    renderStatus({ state: "failed", log: [], error: job.detail || "could not start" });
+    $("run").disabled = false;
+    return;
+  }
+  renderStatus(job);
+  POLL = setInterval(() => poll(job.id), 1500);
+};
+
+$("demo").onclick = async () => {
+  showStatus(false);
+  const res = await fetch("/api/demo");
+  if (!res.ok) { alert("No committed timeline in this checkout."); return; }
+  renderResult(await res.json());
+};
+
+(async () => {
+  META = await (await fetch("/api/meta")).json();
+  $("gap").value = META.default_gap;
+  if (!META.demo_available) $("demo").disabled = true;
+})();
+</script>
+</body>
+</html>
