@@ -9,6 +9,7 @@ without a single label, and the answer is less flattering than the picture.
 
 ```bash
 uv run emotion-timeline timeline --against benchmarks/pipeline/timeline-whisper.json
+uv run emotion-timeline timeline --write   # and regenerate the table and the figure
 uv run emotion-timeline score-timeline --valence   # reruns the models over the transcript
 ```
 

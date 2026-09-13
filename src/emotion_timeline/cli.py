@@ -7,8 +7,12 @@ they belong to lands, so `--help` is an honest statement of what works.
 from __future__ import annotations
 
 import argparse
+import difflib
+import os
+import shutil
 import sys
-from collections.abc import Iterator
+import textwrap
+from collections.abc import Iterator, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -24,6 +28,286 @@ SEGMENTS = BENCHMARKS / "stt" / "assemblyai-best.csv"
 GAP_SECONDS = 1.0
 CHUNK_CHARS = 400
 TURBO = "large-v3-turbo"
+
+#: Every subcommand, grouped by the chapter it belongs to and ordered so the
+#: pipeline -- the thing a visitor came for -- is first. This is the only source
+#: of the listing `--help` prints, and `test_cli.py` asserts that every
+#: registered command appears here exactly once, so a new command cannot quietly
+#: go missing from it.
+CHAPTERS: tuple[tuple[str, tuple[tuple[str, str], ...]], ...] = (
+    (
+        "The timeline, on a real recording",
+        (
+            ("timeline", "the per-scene emotion timeline over the committed transcript"),
+            (
+                "serve",
+                "open the pipeline in a browser (needs --extra web, and stt+model to run one)",
+            ),
+            ("transcribe", "a video URL or an audio file into a segment CSV (needs --extra stt)"),
+            (
+                "score-timeline",
+                "run both models over a transcript and write the record (needs --extra model)",
+            ),
+        ),
+    ),
+    (
+        "Which speech-to-text system",
+        (("wer", "score the speech-to-text systems over one window of audio"),),
+    ),
+    (
+        "What it was trained on",
+        (
+            ("dataset", "what the training set is made of, and what building it discarded"),
+            (
+                "build-dataset",
+                "rebuild the training set from the public corpus (needs --extra data)",
+            ),
+        ),
+    ),
+    (
+        "Which model family, and the trained classifier",
+        (
+            ("models", "audit the nine-family model comparison the project inherited"),
+            ("model", "audit the trained classifier against both surviving records of it"),
+            ("errors", "summarise where the emotion classifier goes wrong"),
+        ),
+    ),
+    (
+        "A model that exists",
+        (
+            ("preflight", "check the GPU can actually run a kernel before training on it"),
+            ("split", "the committed train/validation/test split, and how to check it"),
+            (
+                "fine-tune",
+                "train the classifier on the rebuilt dataset (needs --extra model and a GPU)",
+            ),
+            ("summarise", "turn a run's kept predictions into the held-out record"),
+            ("training", "the fine-tune: what it was, what it scored, and how it compares"),
+        ),
+    ),
+    (
+        "Russian, and what translation costs",
+        (
+            ("russian", "the Russian evaluation set, and what mapping it to seven classes cost"),
+            (
+                "build-russian",
+                "rebuild the Russian evaluation set from the public corpus (needs --extra data)",
+            ),
+            (
+                "compare-russian",
+                "score every approach to Russian on the held-out split (needs --extra model)",
+            ),
+            (
+                "translation-cost",
+                "price what translation costs, on the model's own rows (needs --extra model)",
+            ),
+        ),
+    ),
+    (
+        "Valence and arousal, scored",
+        (("valence", "what the valence-arousal model separates, and what it does not add"),),
+    ),
+    ("The figures", (("figures", "render the README figures from the recorded statistics"),)),
+)
+
+#: Flattened, in the order `--help` shows them. Used to tell a typo from a
+#: command before argparse gets the chance to reprint all twenty-one names.
+COMMANDS: tuple[str, ...] = tuple(name for _, entries in CHAPTERS for name, _ in entries)
+
+#: What each command looks like when somebody actually runs it. clig.dev's
+#: first rule for help text is to lead with examples, and the bare commands that
+#: take no interesting flag are their own example, so only these carry one.
+EXAMPLES: dict[str, str] = {
+    "timeline": """examples:
+  emotion-timeline timeline
+  emotion-timeline timeline --against benchmarks/pipeline/timeline-whisper.json
+  emotion-timeline timeline --record mine.json --segments data/segments.csv""",
+    "serve": """examples:
+  emotion-timeline serve
+  emotion-timeline serve --port 8080""",
+    "transcribe": """examples:
+  emotion-timeline transcribe https://www.youtube.com/watch?v=SOME_ID
+  emotion-timeline transcribe episode.mp4 --out data/segments.csv
+  emotion-timeline transcribe episode.mp4 --no-vad   # if the transcript has holes""",
+    "score-timeline": """examples:
+  emotion-timeline score-timeline --segments data/segments.csv --out mine.json
+  emotion-timeline score-timeline --segments data/segments.csv --valence""",
+    "wer": """examples:
+  emotion-timeline wer
+  emotion-timeline wer --window 0:00-5:00""",
+    "build-dataset": """examples:
+  emotion-timeline build-dataset
+  emotion-timeline build-dataset --out data/dataset.csv""",
+    "preflight": """examples:
+  emotion-timeline preflight
+  emotion-timeline preflight --need-mib 8000""",
+    "split": """examples:
+  emotion-timeline split
+  emotion-timeline split --verify data/dataset.csv""",
+    "fine-tune": """examples:
+  emotion-timeline fine-tune
+  emotion-timeline fine-tune --epochs 3 --batch-size 32""",
+    "build-russian": """examples:
+  emotion-timeline build-russian
+  emotion-timeline build-russian --out data/russian.csv""",
+    "compare-russian": """examples:
+  emotion-timeline compare-russian             # read the committed comparison
+  emotion-timeline compare-russian --rescore   # rerun all four, the better part of an hour""",
+    "translation-cost": """examples:
+  emotion-timeline translation-cost
+  emotion-timeline translation-cost --rows 500""",
+    "valence": """examples:
+  emotion-timeline valence
+  emotion-timeline valence --rescore""",
+    "figures": """examples:
+  emotion-timeline figures
+  emotion-timeline figures --check   # verify the committed figures match the records""",
+}
+
+#: The optional dependency group each command needs. One dict rather than a
+#: handler per command, because the failure is always the same shape and the
+#: only thing that varies is the name to install. `test_cli.py` checks it against
+#: what each command's own help text promises, so the two cannot drift.
+EXTRAS: dict[str, str] = {
+    "build-dataset": "data",
+    "build-russian": "data",
+    "fine-tune": "model",
+    "compare-russian": "model",
+    "score-timeline": "model",
+    "translation-cost": "model",
+    "transcribe": "stt",
+    "serve": "web",
+}
+
+#: Set by --debug or this variable; both make an unexpected failure print its
+#: traceback instead of one line.
+DEBUG_ENV = "EMOTION_TIMELINE_DEBUG"
+
+
+def head_commit(git: Path | None = None) -> str | None:
+    """The checked-out commit, read from .git rather than shelled out for.
+
+    `--version` should say which commit produced the records, and a user who
+    installed the wheel has no .git at all -- so this returns None rather than
+    depending on git being on PATH.
+    """
+    git = git if git is not None else Path(__file__).resolve().parents[2] / ".git"
+    try:
+        head = (git / "HEAD").read_text(encoding="utf-8").strip()
+        if head.startswith("ref: "):
+            head = (git / head[5:]).read_text(encoding="utf-8").strip()
+    except OSError:
+        return None
+    return head[:12] if len(head) >= 12 else None
+
+
+def version_string() -> str:
+    """What `--version` prints: the package, and the commit it was run from."""
+    from importlib.metadata import PackageNotFoundError, version
+
+    try:
+        installed = version("emotion-timeline")
+    except PackageNotFoundError:  # pragma: no cover - only when not installed
+        installed = "unknown"
+    commit = head_commit()
+    return f"emotion-timeline {installed}" + (f" ({commit})" if commit else "")
+
+
+def wrapped_help(entries: Sequence[tuple[str, str]], pad: int, width: int) -> Iterator[str]:
+    """One `name  help` line per command, wrapped to the terminal."""
+    for name, summary in entries:
+        body = textwrap.wrap(summary, max(width - pad - 4, 28)) or [""]
+        yield f"    {name:<{pad}}{body[0]}"
+        for line in body[1:]:
+            yield f"    {'':<{pad}}{line}"
+
+
+def command_listing(width: int | None = None) -> str:
+    """The grouped listing `--help` ends with.
+
+    argparse cannot put headings in its own subcommand list, and twenty-one
+    names in one flat block is not a list anybody reads -- so this is built from
+    :data:`CHAPTERS`, and argparse is never given the one-line help at all.
+    """
+    if width is None:  # pragma: no cover - depends on the terminal
+        width = min(max(shutil.get_terminal_size((88, 24)).columns, 60), 100)
+    pad = max(len(name) for name in COMMANDS) + 3
+    lines = ["commands:"]
+    for title, entries in CHAPTERS:
+        lines.append("")
+        lines.append(f"  {title}")
+        lines.extend(wrapped_help(entries, pad, width))
+    lines.append("")
+    lines.append("  emotion-timeline <command> --help   what it does, and every default it uses")
+    return "\n".join(lines)
+
+
+def registered_commands(parser: argparse.ArgumentParser) -> frozenset[str]:
+    """Every subcommand the parser actually accepts.
+
+    argparse keeps this behind a private attribute. It is dug out here rather
+    than in the test that uses it, because that test exists to check that
+    :data:`CHAPTERS` lists every command -- and a test that asked CHAPTERS what
+    the commands are would check nothing at all.
+    """
+    for action in parser._actions:
+        if isinstance(action, argparse._SubParsersAction):
+            return frozenset(action.choices)
+    return frozenset()  # pragma: no cover - the parser always has subcommands
+
+
+def suggest_command(argv: Sequence[str], known: Sequence[str]) -> str | None:
+    """A message for a command that does not exist, or None if one does.
+
+    argparse's own invalid-choice error reprints all twenty-one names and
+    suggests nothing. The first token that is not a flag is the command, because
+    the only options that can precede it are --debug, --version and -h.
+    """
+    for token in argv:
+        if token.startswith("-"):
+            continue
+        if token in known:
+            return None
+        close = difflib.get_close_matches(token, list(known), n=3, cutoff=0.5)
+        hint = "\n  did you mean:  " + ", ".join(close) if close else ""
+        return (
+            f"emotion-timeline: there is no {token!r} command{hint}"
+            "\n  emotion-timeline --help lists all of them"
+        )
+    return None
+
+
+def missing_extra(command: str, error: ImportError) -> str:
+    """The one message a user sees when an optional dependency is not there."""
+    extra = EXTRAS.get(command)
+    if extra is None:  # pragma: no cover - a genuine bug, not a missing extra
+        return f"emotion-timeline {command}: {type(error).__name__}: {error}"
+    missing = error.name or "a dependency"
+    return (
+        f"emotion-timeline {command} needs the optional {extra!r} dependencies, "
+        f"and {missing} is not installed."
+        f"\n  uv sync --extra {extra}"
+        f"\n  or just this once:  uv run --extra {extra} emotion-timeline {command} ..."
+    )
+
+
+def missing_file(command: str, error: OSError) -> str:
+    """A missing path, said once, instead of a traceback through pathlib."""
+    name = error.filename or "a file it needs"
+    return (
+        f"emotion-timeline {command}: cannot find {name}"
+        "\n  every record a read-only command needs is committed, so this usually"
+        "\n  means the working directory is not the repository root"
+    )
+
+
+def unexpected(command: str, error: BaseException) -> str:
+    """Anything not recognised: one line, and how to see the whole thing."""
+    return (
+        f"emotion-timeline {command}: {type(error).__name__}: {error}"
+        "\n  run it again with --debug for the traceback, and please report it at"
+        "\n  https://github.com/alex-krasnoshtanov/Emotion-Timeline/issues"
+    )
 
 
 def parse_timestamp(text: str) -> float:
@@ -687,7 +971,33 @@ def _russian_splits(dataset: str, manifest_path: str) -> dict[str, Any]:
     return out
 
 
-def cmd_compare_russian(args: argparse.Namespace) -> int:  # pragma: no cover - runs four models
+def cmd_compare_russian(args: argparse.Namespace) -> int:
+    """Read the committed comparison, or rerun every approach behind --rescore.
+
+    Rerunning loads four models and two translators and takes the better part of
+    an hour. That is not what a command called `compare-russian` should do to
+    somebody who typed it to see the comparison, so it is behind a flag -- the
+    same shape as `valence --rescore`.
+    """
+    from emotion_timeline.russian import compare
+
+    if args.rescore:  # pragma: no cover - runs four models
+        return _rescore_russian(args)
+
+    report = compare.Comparison.load(args.record)
+    problems = compare.check_consistency(report)
+    for problem in problems:
+        print(f"inconsistent record: {problem}", file=sys.stderr)
+    if problems:
+        return 1
+    for line in compare.describe(report):
+        print(line)
+    print()
+    print("  --rescore reruns every approach from the models (needs --extra model)")
+    return 0
+
+
+def _rescore_russian(args: argparse.Namespace) -> int:  # pragma: no cover - runs four models
     """Score every approach to Russian on the one held-out split."""
     import numpy as np
 
@@ -779,7 +1089,7 @@ def cmd_compare_russian(args: argparse.Namespace) -> int:  # pragma: no cover - 
     record = compare.build_record(
         true, approaches, pair=("A translate, then ours", "B native ruBERT")
     )
-    written = run.write_record(record, args.out)
+    written = run.write_record(record, args.record)
     print()
     for line in compare.describe(compare.Comparison.load(written)):
         print(line)
@@ -858,9 +1168,13 @@ def cmd_timeline(args: argparse.Namespace) -> int:
         for move, count in list(overlap["disagreements"].items())[:5]:
             print(f"    {move:<24} {count:>5}s")
 
+    print()
+    if not args.write:
+        print("  --write regenerates the table and the figure from this record")
+        return 0
+
     written = pipeline.write_csv(pipeline.table(report, segments), args.out)
     drawn = pipeline_figures.render_all(report, args.assets)
-    print()
     print(f"wrote {written}")
     for path in drawn:
         print(f"wrote {path}")
@@ -1220,16 +1534,98 @@ def cmd_model(args: argparse.Namespace) -> int:
     return 0
 
 
+#: The repository, so a default can be printed as the path somebody would type
+#: rather than as wherever this checkout happens to live.
+REPO = Path(__file__).resolve().parents[2]
+
+
+def shown_default(value: Any) -> str | None:
+    """How a default should read in `--help`, or None to leave it out.
+
+    Two defaults are worth nothing to a reader. `None` is not a value anyone can
+    pass, so a flag that has it explains itself in words or says nothing at all;
+    and `False` on a switch is just what "off unless given" already means. What
+    is left is written relative to the repository, because the absolute path is
+    this machine's and no use to anybody reading it anywhere else.
+    """
+    if value is None or value is False or value is argparse.SUPPRESS:
+        return None
+    if isinstance(value, str) and value.startswith(str(REPO)):
+        return Path(value).relative_to(REPO).as_posix()
+    return str(value)
+
+
+class Formatter(argparse.HelpFormatter):
+    """Wrap prose, leave laid-out blocks alone, and show the useful defaults.
+
+    argparse offers these as two formatters that cannot be usefully combined:
+    `RawDescriptionHelpFormatter` leaves the epilog's examples alone but also
+    stops wrapping the description, and `ArgumentDefaultsHelpFormatter` prints
+    `(default: None)` on every optional path. A block that was laid out by hand
+    has newlines in it and prose does not, which is the whole of the rule below.
+    """
+
+    def _fill_text(self, text: str, width: int, indent: str) -> str:
+        if "\n" in text:
+            return "".join(f"{indent}{line}" for line in text.splitlines(keepends=True))
+        return super()._fill_text(text, width, indent)
+
+    def _get_help_string(self, action: argparse.Action) -> str | None:
+        shown = shown_default(action.default)
+        if not action.option_strings or shown is None or "%(default)" in (action.help or ""):
+            return action.help
+        return f"{action.help or ''} (default: {shown})".strip()
+
+
+def global_flags() -> argparse.ArgumentParser:
+    """Flags that mean the same thing before or after the command name.
+
+    Attached to the top-level parser and to every subcommand, so both
+    `emotion-timeline --debug timeline` and `emotion-timeline timeline --debug`
+    work -- a user who has just been told to pass --debug should not also have to
+    be told where to put it.
+    """
+    shared = argparse.ArgumentParser(add_help=False)
+    # SUPPRESS, not False: a subparser parses into a fresh namespace and copies
+    # every attribute back over the parent's, so a False default here would
+    # silently undo a --debug given before the command name.
+    shared.add_argument(
+        "--debug",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help=f"print the traceback when something fails (or set {DEBUG_ENV}=1)",
+    )
+    return shared
+
+
 def build_parser() -> argparse.ArgumentParser:
+    shared = global_flags()
     parser = argparse.ArgumentParser(
         prog="emotion-timeline",
         description="Per-scene emotion analysis: dataset, model and pipeline.",
+        epilog=command_listing(),
+        formatter_class=Formatter,
+        parents=[shared],
     )
-    sub = parser.add_subparsers(dest="command", required=True)
+    parser.add_argument(
+        "--version", action="version", version=version_string(), help="print the version and exit"
+    )
+    # No `help=` reaches argparse: the one-line summaries live in CHAPTERS, which
+    # is what the epilog above prints. Without them argparse lists no choices,
+    # which is the point -- but `<command>` still appears in the usage line,
+    # which suppressing the action outright would not have done.
+    sub = parser.add_subparsers(
+        dest="command",
+        required=True,
+        metavar="<command>",
+        help="one of the commands listed below",
+    )
 
     wer_parser = sub.add_parser(
         "wer",
-        help="score the speech-to-text systems over one window of audio",
+        formatter_class=Formatter,
+        epilog=EXAMPLES["wer"],
+        parents=[shared],
         description=(
             "Compare transcribers over the same stretch of audio. The window is "
             "a time range, never a row count: the systems segment differently, "
@@ -1241,7 +1637,7 @@ def build_parser() -> argparse.ArgumentParser:
         type=parse_window,
         default=(0.0, 1089.0),
         metavar="START-END",
-        help="time range to score, e.g. 0:00-18:09 (default: %(default)s seconds)",
+        help="time range to score in seconds, e.g. 0:00-18:09",
     )
     wer_parser.add_argument(
         "--benchmarks",
@@ -1262,7 +1658,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     model_parser = sub.add_parser(
         "model",
-        help="audit the trained classifier against both surviving records of it",
+        formatter_class=Formatter,
+        parents=[shared],
         description=(
             "Two records of the classifier survive and they describe different "
             "models: the group's model card claims DeBERTa-V2 evaluated "
@@ -1272,12 +1669,15 @@ def build_parser() -> argparse.ArgumentParser:
             "record's own arithmetic, and the identities that tell the two apart."
         ),
     )
-    model_parser.add_argument("--card-metrics", default=card_default)
+    model_parser.add_argument(
+        "--card-metrics", default=card_default, help="the model card's own reported metrics"
+    )
     model_parser.set_defaults(func=cmd_model)
 
     dataset_parser = sub.add_parser(
         "dataset",
-        help="what the training set is made of, and what building it discarded",
+        formatter_class=Formatter,
+        parents=[shared],
         description=(
             "Reads the committed build record. Every number it prints was produced "
             "by 'build-dataset' on this machine, not copied from the original "
@@ -1285,28 +1685,40 @@ def build_parser() -> argparse.ArgumentParser:
             "as such because their source file no longer exists."
         ),
     )
-    dataset_parser.add_argument("--build-record", default=record_default)
+    dataset_parser.add_argument(
+        "--build-record",
+        default=record_default,
+        help="the committed build record this is checked against",
+    )
     dataset_parser.set_defaults(func=cmd_dataset)
 
     build_dataset_parser = sub.add_parser(
         "build-dataset",
-        help="rebuild the training set from the public corpus (needs --extra data)",
+        formatter_class=Formatter,
+        epilog=EXAMPLES["build-dataset"],
+        parents=[shared],
         description=(
             "Downloads the source corpus and reruns the whole funnel, then checks "
             "the result against the committed record. Takes a few minutes and about "
             "a gigabyte of cache."
         ),
     )
-    build_dataset_parser.add_argument("--build-record", default=record_default)
     build_dataset_parser.add_argument(
-        "--out", help="write the rebuilt dataset here as CSV (default: do not write it)"
+        "--build-record",
+        default=record_default,
+        help="the committed build record this is checked against",
+    )
+    build_dataset_parser.add_argument(
+        "--out", help="write the rebuilt dataset here as CSV; without it, nothing is written"
     )
     build_dataset_parser.add_argument("--cache", help="dataset download cache directory")
     build_dataset_parser.set_defaults(func=cmd_build_dataset)
 
     preflight_parser = sub.add_parser(
         "preflight",
-        help="check the GPU can actually run a kernel before training on it",
+        formatter_class=Formatter,
+        epilog=EXAMPLES["preflight"],
+        parents=[shared],
         description=(
             "Reports the card, the torch build and the architectures it carries "
             "kernels for, then runs one real matrix multiply. Both ways this goes "
@@ -1317,13 +1729,15 @@ def build_parser() -> argparse.ArgumentParser:
         "--need-mib",
         type=int,
         default=6000,
-        help="free video memory the run needs (default: enough for batch 64 at length 128)",
+        help="free video memory the run needs, in MiB; %(default)s fits batch 64 at length 128",
     )
     preflight_parser.set_defaults(func=cmd_preflight)
 
     split_parser = sub.add_parser(
         "split",
-        help="the committed train/validation/test split, and how to check it",
+        formatter_class=Formatter,
+        epilog=EXAMPLES["split"],
+        parents=[shared],
         description=(
             "Prints the split the fine-tune trains on. No rows are committed, so "
             "membership is pinned by a digest per split: --verify recomputes those "
@@ -1331,7 +1745,9 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     split_parser.add_argument(
-        "--manifest", default=str(BENCHMARKS / "training" / "split-manifest.json")
+        "--manifest",
+        default=str(BENCHMARKS / "training" / "split-manifest.json"),
+        help="the committed split; membership is pinned by a digest per split",
     )
     split_parser.add_argument("--verify", help="recompute the split from this rebuilt CSV")
     split_parser.add_argument("--write", help="regenerate the manifest from this rebuilt CSV")
@@ -1339,57 +1755,116 @@ def build_parser() -> argparse.ArgumentParser:
 
     fine_tune_parser = sub.add_parser(
         "fine-tune",
-        help="train the classifier on the rebuilt dataset (needs --extra model and a GPU)",
+        formatter_class=Formatter,
+        epilog=EXAMPLES["fine-tune"],
+        parents=[shared],
         description=(
             "Runs preflight first, then fine-tunes on the committed split. Writes "
             "the run record under benchmarks/, the weights and the per-sample "
             "logits outside it -- those ship as release assets, not in git."
         ),
     )
-    fine_tune_parser.add_argument("--dataset", default="data/dataset.csv")
     fine_tune_parser.add_argument(
-        "--manifest", default=str(BENCHMARKS / "training" / "split-manifest.json")
+        "--dataset",
+        default="data/dataset.csv",
+        help="the rebuilt training CSV that `build-dataset --out` writes",
     )
     fine_tune_parser.add_argument(
-        "--out", default=str(BENCHMARKS / "training" / "run-baseline.json")
+        "--manifest",
+        default=str(BENCHMARKS / "training" / "split-manifest.json"),
+        help="the committed split; membership is pinned by a digest per split",
     )
-    fine_tune_parser.add_argument("--weights", default="models/distilbert-v1")
-    fine_tune_parser.add_argument("--predictions", default="models/predictions-v1.npz")
-    fine_tune_parser.add_argument("--model-id", default=None)
-    fine_tune_parser.add_argument("--epochs", type=int, default=None)
-    fine_tune_parser.add_argument("--batch-size", type=int, default=None)
-    fine_tune_parser.add_argument("--learning-rate", type=float, default=None)
-    fine_tune_parser.add_argument("--max-length", type=int, default=None)
-    fine_tune_parser.add_argument("--seed", type=int, default=None)
+    fine_tune_parser.add_argument(
+        "--out",
+        default=str(BENCHMARKS / "training" / "run-baseline.json"),
+        help="where the run record is written",
+    )
+    fine_tune_parser.add_argument(
+        "--weights",
+        default="models/distilbert-v1",
+        help="the fine-tuned English classifier (a release asset, not in git)",
+    )
+    fine_tune_parser.add_argument(
+        "--predictions",
+        default="models/predictions-v1.npz",
+        help="where the per-sample logits are kept for `summarise`",
+    )
+    fine_tune_parser.add_argument(
+        "--model-id",
+        default=None,
+        help="base checkpoint to fine-tune; unset uses the committed record's",
+    )
+    fine_tune_parser.add_argument(
+        "--epochs",
+        type=int,
+        default=None,
+        help="epochs to train; unset uses the committed record's value",
+    )
+    fine_tune_parser.add_argument(
+        "--batch-size",
+        type=int,
+        default=None,
+        help="batch size; unset uses the committed record's value",
+    )
+    fine_tune_parser.add_argument(
+        "--learning-rate",
+        type=float,
+        default=None,
+        help="learning rate; unset uses the committed record's value",
+    )
+    fine_tune_parser.add_argument(
+        "--max-length",
+        type=int,
+        default=None,
+        help="token limit; unset uses the committed record's value",
+    )
+    fine_tune_parser.add_argument(
+        "--seed",
+        type=int,
+        default=None,
+        help="random seed; unset uses the committed record's value",
+    )
     fine_tune_parser.add_argument(
         "--class-weights",
         action="store_true",
-        help="weight the loss by inverse class frequency (default: off, as the card's model was)",
+        help="weight the loss by inverse class frequency; off is what the card's model did",
     )
     fine_tune_parser.set_defaults(func=cmd_fine_tune)
 
     summarise_parser = sub.add_parser(
         "summarise",
-        help="turn a run's kept predictions into the held-out record",
+        formatter_class=Formatter,
+        parents=[shared],
         description=(
             "Reads the logits a fine-tune saved and writes the error-analysis "
             "record for them, in the same shape as the inherited one -- so the "
             "same command and the same figures read both."
         ),
     )
-    summarise_parser.add_argument("--predictions", default="models/predictions-v1.npz")
-    summarise_parser.add_argument("--dataset", default="data/dataset.csv")
     summarise_parser.add_argument(
-        "--manifest", default=str(BENCHMARKS / "training" / "split-manifest.json")
+        "--predictions", default="models/predictions-v1.npz", help="the logits a fine-tune saved"
     )
     summarise_parser.add_argument(
-        "--out", default=str(BENCHMARKS / "training" / "held-out-summary.json")
+        "--dataset",
+        default="data/dataset.csv",
+        help="the rebuilt training CSV that `build-dataset --out` writes",
+    )
+    summarise_parser.add_argument(
+        "--manifest",
+        default=str(BENCHMARKS / "training" / "split-manifest.json"),
+        help="the committed split; membership is pinned by a digest per split",
+    )
+    summarise_parser.add_argument(
+        "--out",
+        default=str(BENCHMARKS / "training" / "held-out-summary.json"),
+        help="where the held-out record is written",
     )
     summarise_parser.set_defaults(func=cmd_summarise)
 
     training_parser = sub.add_parser(
         "training",
-        help="the fine-tune: what it was, what it scored, and how it compares",
+        formatter_class=Formatter,
+        parents=[shared],
         description=(
             "Reads only committed records, so it runs on a fresh clone with no "
             "dataset and no weights. Reproducing those records is what `fine-tune` "
@@ -1397,27 +1872,41 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     training_parser.add_argument(
-        "--run", default=str(BENCHMARKS / "training" / "run-baseline.json")
+        "--run",
+        default=str(BENCHMARKS / "training" / "run-baseline.json"),
+        help="the fine-tune's run record",
     )
     training_parser.add_argument(
-        "--summary", default=str(BENCHMARKS / "training" / "held-out-summary.json")
+        "--summary",
+        default=str(BENCHMARKS / "training" / "held-out-summary.json"),
+        help="the held-out record `summarise` writes",
     )
     training_parser.add_argument(
-        "--card-metrics", default=str(BENCHMARKS / "model" / "card-metrics.json")
+        "--card-metrics",
+        default=str(BENCHMARKS / "model" / "card-metrics.json"),
+        help="the model card's own reported metrics",
     )
     training_parser.set_defaults(func=cmd_training)
 
     build_russian_parser = sub.add_parser(
         "build-russian",
-        help="rebuild the Russian evaluation set from the public corpus (needs --extra data)",
+        formatter_class=Formatter,
+        epilog=EXAMPLES["build-russian"],
+        parents=[shared],
         description=(
             "Downloads Djacon/ru-izard-emotions and reruns the funnel, then checks "
             "the result against the committed record. Small and quick -- about "
             "25,000 rows."
         ),
     )
-    build_russian_parser.add_argument("--build-record", default=str(RU_RECORD))
-    build_russian_parser.add_argument("--out", help="write the rebuilt set here as CSV")
+    build_russian_parser.add_argument(
+        "--build-record",
+        default=str(RU_RECORD),
+        help="the committed build record this is checked against",
+    )
+    build_russian_parser.add_argument(
+        "--out", help="write the rebuilt set here as CSV; without it, nothing is written"
+    )
     build_russian_parser.add_argument("--cache", help="dataset download cache directory")
     build_russian_parser.add_argument(
         "--drop-enthusiasm",
@@ -1431,49 +1920,89 @@ def build_parser() -> argparse.ArgumentParser:
 
     russian_parser = sub.add_parser(
         "russian",
-        help="the Russian evaluation set, and what mapping it to seven classes cost",
-    )
-    russian_parser.add_argument("--build-record", default=str(RU_RECORD))
-    russian_parser.add_argument(
-        "--comparison", default=str(BENCHMARKS / "russian" / "comparison.json")
+        formatter_class=Formatter,
+        parents=[shared],
     )
     russian_parser.add_argument(
-        "--translation-cost", default=str(BENCHMARKS / "russian" / "translation-cost.json")
+        "--build-record",
+        default=str(RU_RECORD),
+        help="the committed build record this is checked against",
+    )
+    russian_parser.add_argument(
+        "--comparison",
+        default=str(BENCHMARKS / "russian" / "comparison.json"),
+        help="the Russian comparison, read for each model's fitted temperature",
+    )
+    russian_parser.add_argument(
+        "--translation-cost",
+        default=str(BENCHMARKS / "russian" / "translation-cost.json"),
+        help="the priced record; shown too when it is there",
     )
     russian_parser.set_defaults(func=cmd_russian)
 
     compare_russian_parser = sub.add_parser(
         "compare-russian",
-        help="score every approach to Russian on the held-out split (needs --extra model)",
+        formatter_class=Formatter,
+        epilog=EXAMPLES["compare-russian"],
+        parents=[shared],
         description=(
             "Runs the translator, our model, a native ruBERT and two off-the-shelf "
             "classifiers over the same rows, calibrates the two that answer in our "
             "seven classes, and writes the comparison."
         ),
     )
-    compare_russian_parser.add_argument("--dataset", default="data/russian.csv")
     compare_russian_parser.add_argument(
-        "--manifest", default=str(BENCHMARKS / "russian" / "split-manifest.json")
-    )
-    compare_russian_parser.add_argument("--weights", default="models/distilbert-v1")
-    compare_russian_parser.add_argument("--rubert", default="models/rubert-v1")
-    compare_russian_parser.add_argument(
-        "--rubert-predictions", default="models/predictions-rubert.npz"
+        "--dataset",
+        default="data/russian.csv",
+        help="the rebuilt Russian CSV that `build-russian --out` writes",
     )
     compare_russian_parser.add_argument(
-        "--multilingual", default="tabularisai/multilingual-emotion-classification"
+        "--manifest",
+        default=str(BENCHMARKS / "russian" / "split-manifest.json"),
+        help="the committed split; membership is pinned by a digest per split",
     )
     compare_russian_parser.add_argument(
-        "--incumbent", default="Djacon/rubert-tiny2-russian-emotion-detection"
+        "--weights",
+        default="models/distilbert-v1",
+        help="the fine-tuned English classifier (a release asset, not in git)",
     )
     compare_russian_parser.add_argument(
-        "--out", default=str(BENCHMARKS / "russian" / "comparison.json")
+        "--rubert",
+        default="models/rubert-v1",
+        help="the native Russian classifier (a release asset, not in git)",
+    )
+    compare_russian_parser.add_argument(
+        "--rubert-predictions",
+        default="models/predictions-rubert.npz",
+        help="the native model's saved logits, so it is not rerun here",
+    )
+    compare_russian_parser.add_argument(
+        "--multilingual",
+        default="tabularisai/multilingual-emotion-classification",
+        help="the off-the-shelf multilingual model, approach C",
+    )
+    compare_russian_parser.add_argument(
+        "--incumbent",
+        default="Djacon/rubert-tiny2-russian-emotion-detection",
+        help="the model the original pipeline shipped, approach D",
+    )
+    compare_russian_parser.add_argument(
+        "--record",
+        default=str(BENCHMARKS / "russian" / "comparison.json"),
+        help="the committed comparison; read by default, rewritten by --rescore",
+    )
+    compare_russian_parser.add_argument(
+        "--rescore",
+        action="store_true",
+        help="rerun every approach from the models instead of reading the record",
     )
     compare_russian_parser.set_defaults(func=cmd_compare_russian)
 
     transcribe_parser = sub.add_parser(
         "transcribe",
-        help="a video URL or an audio file into a segment CSV (needs --extra stt)",
+        formatter_class=Formatter,
+        epilog=EXAMPLES["transcribe"],
+        parents=[shared],
         description=(
             "Downloads audio if given a URL, converts it to 16 kHz mono, runs "
             "Whisper large-v3-turbo, and writes start_s, end_s and text. That "
@@ -1481,11 +2010,15 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     transcribe_parser.add_argument("source", help="a video URL, or a local audio or video file")
-    transcribe_parser.add_argument("--out", default="data/segments.csv")
+    transcribe_parser.add_argument(
+        "--out", default="data/segments.csv", help="where the segment CSV is written"
+    )
     transcribe_parser.add_argument(
         "--downloads", default="downloads", help="where audio is cached; gitignored"
     )
-    transcribe_parser.add_argument("--model", default=TURBO)
+    transcribe_parser.add_argument(
+        "--model", default=TURBO, help="the Whisper checkpoint to transcribe with"
+    )
     transcribe_parser.add_argument(
         "--language", default="ru", help="passed rather than detected; see the module docstring"
     )
@@ -1498,20 +2031,23 @@ def build_parser() -> argparse.ArgumentParser:
 
     score_timeline_parser = sub.add_parser(
         "score-timeline",
-        help="run both models over a transcript and write the timeline record "
-        "(needs --extra model)",
+        formatter_class=Formatter,
+        epilog=EXAMPLES["score-timeline"],
+        parents=[shared],
         description=(
             "Groups a segment CSV into scenes by silence, scores every segment "
             "with the native Russian model and with the translation path, "
             "applies each model's fitted temperature, and writes the record."
         ),
     )
-    score_timeline_parser.add_argument("--segments", default=str(SEGMENTS))
+    score_timeline_parser.add_argument(
+        "--segments", default=str(SEGMENTS), help="the transcript to read: start_s, end_s and text"
+    )
     score_timeline_parser.add_argument(
         "--gap",
         type=float,
         default=GAP_SECONDS,
-        help="silence longer than this starts a new scene (seconds)",
+        help="silence longer than this starts a new scene, in seconds",
     )
     score_timeline_parser.add_argument(
         "--chunk-chars",
@@ -1519,10 +2055,20 @@ def build_parser() -> argparse.ArgumentParser:
         default=CHUNK_CHARS,
         help="the classification unit; keeps the timeline independent of the transcriber",
     )
-    score_timeline_parser.add_argument("--weights", default="models/distilbert-v1")
-    score_timeline_parser.add_argument("--rubert", default="models/rubert-v1")
     score_timeline_parser.add_argument(
-        "--comparison", default=str(BENCHMARKS / "russian" / "comparison.json")
+        "--weights",
+        default="models/distilbert-v1",
+        help="the fine-tuned English classifier (a release asset, not in git)",
+    )
+    score_timeline_parser.add_argument(
+        "--rubert",
+        default="models/rubert-v1",
+        help="the native Russian classifier (a release asset, not in git)",
+    )
+    score_timeline_parser.add_argument(
+        "--comparison",
+        default=str(BENCHMARKS / "russian" / "comparison.json"),
+        help="the Russian comparison, read for each model's fitted temperature",
     )
     score_timeline_parser.add_argument(
         "--valence",
@@ -1535,22 +2081,39 @@ def build_parser() -> argparse.ArgumentParser:
             "to the label, see `emotion-timeline valence`). Off unless given."
         ),
     )
-    score_timeline_parser.add_argument("--out", default=str(TIMELINE))
+    score_timeline_parser.add_argument(
+        "--out", default=str(TIMELINE), help="where the timeline record is written"
+    )
     score_timeline_parser.set_defaults(func=cmd_score_timeline)
 
     timeline_parser = sub.add_parser(
         "timeline",
-        help="the per-scene emotion timeline over the committed transcript",
+        formatter_class=Formatter,
+        epilog=EXAMPLES["timeline"],
+        parents=[shared],
         description=(
             "Reads the committed timeline record, joins it back to the "
             "transcript it was built from, and writes the table and the figure. "
             "No network, no model, no key."
         ),
     )
-    timeline_parser.add_argument("--record", default=str(TIMELINE))
-    timeline_parser.add_argument("--segments", default=str(SEGMENTS))
-    timeline_parser.add_argument("--out", default=str(BENCHMARKS / "pipeline" / "timeline.csv"))
-    timeline_parser.add_argument("--assets", default="assets", help="where the figure goes")
+    timeline_parser.add_argument(
+        "--record", default=str(TIMELINE), help="the timeline record to read"
+    )
+    timeline_parser.add_argument(
+        "--segments", default=str(SEGMENTS), help="the transcript to read: start_s, end_s and text"
+    )
+    timeline_parser.add_argument(
+        "--write",
+        action="store_true",
+        help="also regenerate the committed table and figure (off: this only reads)",
+    )
+    timeline_parser.add_argument(
+        "--out",
+        default=str(BENCHMARKS / "pipeline" / "timeline.csv"),
+        help="where --write puts the per-scene table",
+    )
+    timeline_parser.add_argument("--assets", default="assets", help="where --write puts the figure")
     timeline_parser.add_argument(
         "--against",
         help="another timeline record; reports how much runtime the two put the same emotion on",
@@ -1559,41 +2122,69 @@ def build_parser() -> argparse.ArgumentParser:
 
     translation_cost_parser = sub.add_parser(
         "translation-cost",
-        help="price what translation costs, on the model's own rows (needs --extra model)",
+        formatter_class=Formatter,
+        epilog=EXAMPLES["translation-cost"],
+        parents=[shared],
         description=(
             "Round-trips the English held-out rows through two translation "
             "engines and re-scores them. Domain, labels and annotator are held "
             "constant, so the drop is the translation and nothing else."
         ),
     )
-    translation_cost_parser.add_argument("--dataset", default="data/dataset.csv")
     translation_cost_parser.add_argument(
-        "--manifest", default=str(BENCHMARKS / "training" / "split-manifest.json")
+        "--dataset",
+        default="data/dataset.csv",
+        help="the rebuilt training CSV that `build-dataset --out` writes",
     )
-    translation_cost_parser.add_argument("--weights", default="models/distilbert-v1")
-    translation_cost_parser.add_argument("--rows", type=int, default=3000)
     translation_cost_parser.add_argument(
-        "--out", default=str(BENCHMARKS / "russian" / "translation-cost.json")
+        "--manifest",
+        default=str(BENCHMARKS / "training" / "split-manifest.json"),
+        help="the committed split; membership is pinned by a digest per split",
+    )
+    translation_cost_parser.add_argument(
+        "--weights",
+        default="models/distilbert-v1",
+        help="the fine-tuned English classifier (a release asset, not in git)",
+    )
+    translation_cost_parser.add_argument(
+        "--rows", type=int, default=3000, help="how many held-out English rows to round-trip"
+    )
+    translation_cost_parser.add_argument(
+        "--out",
+        default=str(BENCHMARKS / "russian" / "translation-cost.json"),
+        help="where the priced record is written",
     )
     translation_cost_parser.set_defaults(func=cmd_translation_cost)
 
     serve_parser = sub.add_parser(
         "serve",
-        help="open the pipeline in a browser (needs --extra web, and stt+model to run one)",
+        formatter_class=Formatter,
+        epilog=EXAMPLES["serve"],
+        parents=[shared],
         description=(
             "A local page that takes a link or a file and draws the timeline. "
             "Binds to loopback: it hands URLs to yt-dlp and files to ffmpeg, so "
             "it is a tool you run for yourself rather than a service to expose."
         ),
     )
-    serve_parser.add_argument("--host", default="127.0.0.1")
-    serve_parser.add_argument("--port", type=int, default=8000)
-    serve_parser.add_argument("--downloads", default="downloads")
+    serve_parser.add_argument(
+        "--host",
+        default="127.0.0.1",
+        help="loopback on purpose; see the module docstring before changing it",
+    )
+    serve_parser.add_argument("--port", type=int, default=8000, help="port to listen on")
+    serve_parser.add_argument(
+        "--downloads",
+        default="downloads",
+        help="where fetched audio and uploads are cached; gitignored",
+    )
     serve_parser.set_defaults(func=cmd_serve)
 
     valence_parser = sub.add_parser(
         "valence",
-        help="what the valence-arousal model separates, and what it does not add",
+        formatter_class=Formatter,
+        epilog=EXAMPLES["valence"],
+        parents=[shared],
         description=(
             "The second model the original coursework ran, scored for the first "
             "time against this project's own labels. Valence separates Joy from "
@@ -1602,35 +2193,59 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     valence_parser.add_argument(
-        "--record", default=str(BENCHMARKS / "russian" / "valence-arousal.json")
+        "--record",
+        default=str(BENCHMARKS / "russian" / "valence-arousal.json"),
+        help="the committed valence record; read by default",
     )
     valence_parser.add_argument(
         "--rescore",
         action="store_true",
         help="recompute the record from the models (needs --extra model and the checkpoint)",
     )
-    valence_parser.add_argument("--dataset", default="data/russian.csv")
     valence_parser.add_argument(
-        "--manifest", default=str(BENCHMARKS / "russian" / "split-manifest.json")
+        "--dataset",
+        default="data/russian.csv",
+        help="the rebuilt Russian CSV that `build-russian --out` writes",
     )
     valence_parser.add_argument(
-        "--comparison", default=str(BENCHMARKS / "russian" / "comparison.json")
+        "--manifest",
+        default=str(BENCHMARKS / "russian" / "split-manifest.json"),
+        help="the committed split; membership is pinned by a digest per split",
     )
-    valence_parser.add_argument("--checkpoint", default="models/va-v1")
-    valence_parser.add_argument("--weights", default="models/distilbert-v1")
-    valence_parser.add_argument("--rubert-predictions", default="models/predictions-rubert.npz")
+    valence_parser.add_argument(
+        "--comparison",
+        default=str(BENCHMARKS / "russian" / "comparison.json"),
+        help="the Russian comparison, read for each model's fitted temperature",
+    )
+    valence_parser.add_argument(
+        "--checkpoint", default="models/va-v1", help="the valence-arousal checkpoint"
+    )
+    valence_parser.add_argument(
+        "--weights",
+        default="models/distilbert-v1",
+        help="the fine-tuned English classifier (a release asset, not in git)",
+    )
+    valence_parser.add_argument(
+        "--rubert-predictions",
+        default="models/predictions-rubert.npz",
+        help="the native model's saved logits, so it is not rerun here",
+    )
     valence_parser.set_defaults(func=cmd_valence)
 
     errors_parser = sub.add_parser(
         "errors",
-        help="summarise where the emotion classifier goes wrong",
+        formatter_class=Formatter,
+        parents=[shared],
     )
-    errors_parser.add_argument("--report", default=report_default)
+    errors_parser.add_argument(
+        "--report", default=report_default, help="the committed error-analysis record"
+    )
     errors_parser.set_defaults(func=cmd_errors)
 
     models_parser = sub.add_parser(
         "models",
-        help="audit the nine-family model comparison the project inherited",
+        formatter_class=Formatter,
+        parents=[shared],
         description=(
             "Reads both surviving records of the benchmark and reports what they "
             "establish, which is less than the coursework claimed. Neither log can "
@@ -1645,20 +2260,40 @@ def build_parser() -> argparse.ArgumentParser:
 
     figures_parser = sub.add_parser(
         "figures",
-        help="render the README figures from the recorded statistics",
-    )
-    figures_parser.add_argument("--report", default=report_default)
-    figures_parser.add_argument("--build-record", default=record_default)
-    figures_parser.add_argument("--card-metrics", default=card_default)
-    figures_parser.add_argument("--run", default=str(BENCHMARKS / "training" / "run-baseline.json"))
-    figures_parser.add_argument(
-        "--summary", default=str(BENCHMARKS / "training" / "held-out-summary.json")
+        formatter_class=Formatter,
+        epilog=EXAMPLES["figures"],
+        parents=[shared],
     )
     figures_parser.add_argument(
-        "--comparison", default=str(BENCHMARKS / "russian" / "comparison.json")
+        "--report", default=report_default, help="the committed error-analysis record"
+    )
+    figures_parser.add_argument(
+        "--build-record",
+        default=record_default,
+        help="the committed build record this is checked against",
+    )
+    figures_parser.add_argument(
+        "--card-metrics", default=card_default, help="the model card's own reported metrics"
+    )
+    figures_parser.add_argument(
+        "--run",
+        default=str(BENCHMARKS / "training" / "run-baseline.json"),
+        help="the fine-tune's run record",
+    )
+    figures_parser.add_argument(
+        "--summary",
+        default=str(BENCHMARKS / "training" / "held-out-summary.json"),
+        help="the held-out record `summarise` writes",
+    )
+    figures_parser.add_argument(
+        "--comparison",
+        default=str(BENCHMARKS / "russian" / "comparison.json"),
+        help="the Russian comparison, read for each model's fitted temperature",
     )
     add_selection_arguments(figures_parser)
-    figures_parser.add_argument("--timeline", default=str(TIMELINE))
+    figures_parser.add_argument(
+        "--timeline", default=str(TIMELINE), help="the record the pipeline figure is drawn from"
+    )
     figures_parser.add_argument("--out", default="assets", help="output directory")
     figures_parser.add_argument(
         "--check",
@@ -1679,8 +2314,47 @@ def main(argv: list[str] | None = None) -> int:
 
     credentials.load_env_file()
 
-    args = build_parser().parse_args(argv)
-    return int(args.func(args))
+    parser = build_parser()
+    tokens = list(sys.argv[1:] if argv is None else argv)
+    if not tokens:
+        # clig.dev: a program that needs an argument and is given none should
+        # say what the arguments are, not just that one is missing. It still
+        # exits 2 to stderr, because from a script this is a usage error.
+        print(parser.format_help(), file=sys.stderr)
+        return 2
+
+    problem = suggest_command(tokens, COMMANDS)
+    if problem is not None:
+        print(problem, file=sys.stderr)
+        return 2
+
+    args = parser.parse_args(tokens)
+    debug = bool(getattr(args, "debug", False) or os.environ.get(DEBUG_ENV))
+    try:
+        return int(args.func(args))
+    except KeyboardInterrupt:
+        # clig.dev: say something at once and leave. Nothing here holds a lock
+        # or a half-written record -- every writer writes to a temporary file and
+        # renames -- so there is nothing to clean up on the way out.
+        print("\ninterrupted", file=sys.stderr)
+        return 130
+    except ImportError as error:
+        if debug:
+            raise
+        print(missing_extra(args.command, error), file=sys.stderr)
+        return 1
+    except FileNotFoundError as error:
+        if debug:
+            raise
+        print(missing_file(args.command, error), file=sys.stderr)
+        return 1
+    except (OSError, ValueError, KeyError) as error:
+        # What a wrong path, a wrong flag or a hand-edited record produce.
+        # Anything else is a bug, and gets the same one line plus --debug.
+        if debug:
+            raise
+        print(unexpected(args.command, error), file=sys.stderr)
+        return 1
 
 
 if __name__ == "__main__":

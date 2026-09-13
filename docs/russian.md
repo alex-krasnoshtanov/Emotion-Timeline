@@ -7,7 +7,8 @@ against anything.
 
 ```bash
 uv run emotion-timeline russian            # reads only committed records
-uv run emotion-timeline compare-russian    # reruns every approach
+uv run emotion-timeline compare-russian              # read the committed comparison
+uv run emotion-timeline compare-russian --rescore     # rerun every approach
 uv run emotion-timeline translation-cost   # prices translation on its own
 ```
 

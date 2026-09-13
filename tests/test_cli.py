@@ -167,9 +167,23 @@ def test_timeline_reports_how_much_a_second_transcriber_moves_it(
 
 
 def test_timeline_writes_the_table_and_the_picture(tmp_path: Path) -> None:
-    assert cli.main(["timeline", "--out", str(tmp_path / "t.csv"), "--assets", str(tmp_path)]) == 0
+    assert (
+        cli.main(
+            ["timeline", "--write", "--out", str(tmp_path / "t.csv"), "--assets", str(tmp_path)]
+        )
+        == 0
+    )
     assert (tmp_path / "t.csv").exists()
     assert (tmp_path / "emotion-timeline.png").exists()
+
+
+def test_timeline_writes_nothing_without_being_asked(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A command named for reading a record should not rewrite two files to do it."""
+    assert cli.main(["timeline", "--out", str(tmp_path / "t.csv"), "--assets", str(tmp_path)]) == 0
+    assert list(tmp_path.iterdir()) == []
+    assert "--write" in capsys.readouterr().out
 
 
 def test_timeline_refuses_a_record_that_does_not_match_its_transcript(
@@ -254,9 +268,14 @@ def test_figures_refuses_to_draw_an_inconsistent_report(
 # --- the parser itself -------------------------------------------------------
 
 
-def test_a_subcommand_is_required() -> None:
-    with pytest.raises(SystemExit):
-        cli.main([])
+def test_a_bare_invocation_shows_what_the_commands_are(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The most common first thing anybody types should answer itself."""
+    assert cli.main([]) == 2
+    err = capsys.readouterr().err
+    assert "The timeline, on a real recording" in err
+    assert "  timeline " in err
 
 
 @pytest.mark.parametrize(
@@ -982,3 +1001,251 @@ def test_russian_is_happy_before_any_comparison_has_been_run(
     """The dataset stage stands on its own; the comparison is an addition to it."""
     assert cli.main(["russian", "--comparison", str(tmp_path / "absent.json")]) == 0
     assert "24,766 rows" in capsys.readouterr().out
+
+
+# --- the interface itself ----------------------------------------------------
+
+
+def test_every_command_is_in_exactly_one_chapter() -> None:
+    """`--help` is built from CHAPTERS, so a command missing from it is invisible."""
+    registered = cli.registered_commands(cli.build_parser())
+    listed = [name for _, entries in cli.CHAPTERS for name, _ in entries]
+    assert sorted(listed) == sorted(set(listed)), "a command is in two chapters"
+    assert set(listed) == registered
+
+
+def test_the_listing_names_every_command_and_its_chapters() -> None:
+    listing = cli.command_listing(width=88)
+    for title, entries in cli.CHAPTERS:
+        assert title in listing
+        for name, summary in entries:
+            assert f"  {name} " in listing
+            assert summary.split()[0] in listing
+    assert max(len(line) for line in listing.splitlines()) <= 88
+
+
+def test_help_leads_with_the_grouped_commands(capsys: pytest.CaptureFixture[str]) -> None:
+    """The old usage line was three hundred characters of alternation."""
+    with pytest.raises(SystemExit):
+        cli.main(["--help"])
+    out = capsys.readouterr().out
+    usage = out.splitlines()[0]
+    assert "<command>" in usage and "timeline,score-timeline" not in usage
+    assert len(usage) < 80
+    assert "The timeline, on a real recording" in out
+
+
+def test_every_example_runs_the_command_it_is_filed_under() -> None:
+    """An example under the wrong command is worse than no example."""
+    for name, block in cli.EXAMPLES.items():
+        assert block.startswith("examples:")
+        lines = [line.strip() for line in block.splitlines()[1:] if line.strip()]
+        assert lines, name
+        for line in lines:
+            assert line.startswith(f"emotion-timeline {name}"), (name, line)
+
+
+def test_every_command_needing_an_extra_declares_which(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The help text promises an extra; EXTRAS is what the failure message reads."""
+    promised = {}
+    for _, entries in cli.CHAPTERS:
+        for name, summary in entries:
+            if "needs --extra " in summary:
+                promised[name] = summary.split("needs --extra ")[1].split()[0].rstrip(",)")
+    assert promised == cli.EXTRAS
+
+
+def test_version_names_the_package_and_the_commit(capsys: pytest.CaptureFixture[str]) -> None:
+    with pytest.raises(SystemExit) as exit_code:
+        cli.main(["--version"])
+    assert exit_code.value.code == 0
+    assert capsys.readouterr().out.startswith("emotion-timeline 0.1.0")
+
+
+def test_a_commit_is_read_from_git_or_not_reported(tmp_path: Path) -> None:
+    assert cli.head_commit() is None or len(cli.head_commit() or "") == 12
+    assert cli.head_commit(tmp_path / "nothing-here") is None
+
+    detached = tmp_path / "detached"
+    detached.mkdir()
+    (detached / "HEAD").write_text("a" * 40, encoding="utf-8")
+    assert cli.head_commit(detached) == "a" * 12
+
+    branch = tmp_path / "branch"
+    (branch / "refs" / "heads").mkdir(parents=True)
+    (branch / "HEAD").write_text("ref: refs/heads/main\n", encoding="utf-8")
+    (branch / "refs" / "heads" / "main").write_text("b" * 40, encoding="utf-8")
+    assert cli.head_commit(branch) == "b" * 12
+
+
+# --- errors a human can act on -----------------------------------------------
+
+
+def test_a_near_miss_is_suggested(capsys: pytest.CaptureFixture[str]) -> None:
+    assert cli.main(["timline"]) == 2
+    err = capsys.readouterr().err
+    assert "no 'timline' command" in err
+    assert "did you mean:  timeline" in err
+
+
+def test_a_command_nothing_resembles_just_points_at_help(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    assert cli.main(["zzzzzz"]) == 2
+    err = capsys.readouterr().err
+    assert "did you mean" not in err
+    assert "--help lists all of them" in err
+
+
+def test_a_real_command_is_not_second_guessed() -> None:
+    assert cli.suggest_command(["timeline", "--against", "x"], cli.COMMANDS) is None
+    assert cli.suggest_command(["--help"], cli.COMMANDS) is None
+    assert cli.suggest_command([], cli.COMMANDS) is None
+
+
+def test_a_missing_file_is_a_sentence_not_a_traceback(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    assert cli.main(["timeline", "--record", "nope.json"]) == 1
+    err = capsys.readouterr().err
+    assert "cannot find nope.json" in err
+    assert "Traceback" not in err
+    assert "repository root" in err
+
+
+def test_debug_gives_the_traceback_back_from_either_side() -> None:
+    """A user told to pass --debug should not also have to be told where."""
+    for argv in (
+        ["--debug", "timeline", "--record", "nope.json"],
+        ["timeline", "--record", "nope.json", "--debug"],
+    ):
+        with pytest.raises(FileNotFoundError):
+            cli.main(argv)
+
+
+def test_debug_can_come_from_the_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv(cli.DEBUG_ENV, "1")
+    with pytest.raises(FileNotFoundError):
+        cli.main(["timeline", "--record", "nope.json"])
+
+
+@pytest.mark.parametrize(
+    ("raised", "expected"),
+    [
+        (ImportError("no module named yt_dlp", name="yt_dlp"), "uv sync --extra stt"),
+        (ValueError("that is not a number"), "ValueError: that is not a number"),
+        (KeyError("temperature"), "KeyError:"),
+        (OSError("the disk is full"), "OSError: the disk is full"),
+    ],
+)
+def test_a_failure_inside_a_command_is_one_line(
+    raised: Exception,
+    expected: str,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Whatever goes wrong, a user gets a sentence rather than a stack."""
+
+    def fail(_: object) -> int:
+        raise raised
+
+    monkeypatch.setattr(cli, "cmd_transcribe", fail)
+    assert cli.main(["transcribe", "video.mp4"]) == 1
+    err = capsys.readouterr().err
+    assert expected in err
+    assert "Traceback" not in err
+    assert len(err.splitlines()) <= 4
+
+
+@pytest.mark.parametrize(
+    "raised",
+    [ValueError("bad"), ImportError("no yt_dlp", name="yt_dlp"), FileNotFoundError("gone")],
+)
+def test_debug_re_raises_whatever_it_was(
+    raised: Exception, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def fail(_: object) -> int:
+        raise raised
+
+    monkeypatch.setattr(cli, "cmd_transcribe", fail)
+    with pytest.raises(type(raised)):
+        cli.main(["--debug", "transcribe", "video.mp4"])
+
+
+def test_a_missing_extra_names_itself_and_how_to_install_it() -> None:
+    message = cli.missing_extra("transcribe", ImportError("no", name="yt_dlp"))
+    assert "yt_dlp" in message
+    assert "uv sync --extra stt" in message
+
+
+def test_an_unexpected_failure_offers_the_traceback() -> None:
+    message = cli.unexpected("timeline", ValueError("bad"))
+    assert "ValueError: bad" in message
+    assert "--debug" in message
+
+
+def test_interrupting_is_not_a_crash(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Ctrl-C is a thing a user did on purpose, and 130 is what says so."""
+
+    def interrupt(_: object) -> int:
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(cli, "cmd_timeline", interrupt)
+    assert cli.main(["timeline"]) == 130
+    assert "interrupted" in capsys.readouterr().err
+
+
+# --- defaults worth printing --------------------------------------------------
+
+
+def test_a_default_is_shown_the_way_it_would_be_typed() -> None:
+    assert cli.shown_default(str(ROOT / "benchmarks" / "x.json")) == "benchmarks/x.json"
+    assert cli.shown_default("models/rubert-v1") == "models/rubert-v1"
+    assert cli.shown_default(1.0) == "1.0"
+
+
+def test_defaults_nobody_can_pass_are_not_printed() -> None:
+    """`(default: None)` on every optional path was most of the old help page."""
+    assert cli.shown_default(None) is None
+    assert cli.shown_default(False) is None
+
+
+def test_no_help_page_prints_an_absolute_path(capsys: pytest.CaptureFixture[str]) -> None:
+    """A default with this machine's home directory in it helps nobody."""
+    for name in cli.COMMANDS:
+        with pytest.raises(SystemExit):
+            cli.main([name, "--help"])
+        out = capsys.readouterr().out
+        assert str(ROOT) not in out, name
+        assert "(default: None)" not in out, name
+
+
+# --- reading is the default ---------------------------------------------------
+
+
+def test_compare_russian_reads_the_record_it_used_to_recompute(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Four models and two translators used to be one word away from a typo."""
+    assert cli.main(["compare-russian"]) == 0
+    out = capsys.readouterr().out
+    assert "B native ruBERT" in out
+    assert "--rescore" in out
+
+
+def test_compare_russian_refuses_a_record_that_fails_its_own_checks(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from emotion_timeline.russian import compare
+
+    raw = json.loads(Path(compare.DEFAULT_COMPARISON).read_text(encoding="utf-8"))
+    raw["held_out_rows"] = 1
+    broken = tmp_path / "broken.json"
+    broken.write_text(json.dumps(raw), encoding="utf-8")
+
+    assert cli.main(["compare-russian", "--record", str(broken)]) == 1
+    assert "inconsistent record" in capsys.readouterr().err

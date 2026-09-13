@@ -556,6 +556,13 @@ own, `--extra web` for the browser front end.
 
 pip works too: `pip install -e ".[dev]"`.
 
+`emotion-timeline --help` groups the twenty-one commands by chapter, and every
+command's own `--help` leads with examples and prints the default for every flag.
+Two conventions hold across all of them: a command named for reading a record
+reads it, and the ones that recompute say so — `--write`, `--rescore`, `--verify`.
+When something fails you get a sentence; `--debug` (or `EMOTION_TIMELINE_DEBUG=1`)
+turns that back into a traceback.
+
 ### Working on it
 
 ```bash
