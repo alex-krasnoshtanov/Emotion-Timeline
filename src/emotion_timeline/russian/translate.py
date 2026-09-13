@@ -78,6 +78,8 @@ def _decode(  # pragma: no cover - needs the model and a GPU
     import torch
     from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
+    from emotion_timeline.training import preflight
+
     nllb = model_id == NLLB
     tokenizer = (
         AutoTokenizer.from_pretrained(model_id, src_lang=NLLB_CODES[source])
@@ -85,7 +87,7 @@ def _decode(  # pragma: no cover - needs the model and a GPU
         else AutoTokenizer.from_pretrained(model_id)
     )
     model = AutoModelForSeq2SeqLM.from_pretrained(model_id)
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    device = preflight.usable_device(progress if callable(progress) else None)
     model.to(device).eval()
     extra = (
         {"forced_bos_token_id": tokenizer.convert_tokens_to_ids(NLLB_CODES[target])} if nllb else {}

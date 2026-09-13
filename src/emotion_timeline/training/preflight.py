@@ -20,7 +20,7 @@ hardware are the only ones CI cannot run.
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass
 
 #: Enough for DistilBERT at batch 64 and sequence length 128, with room to spare.
@@ -85,6 +85,72 @@ def assess(device: Device | None, smoke_error: str | None, need_mib: int = NEED_
             "kernel -- see the WSL2 note in docs/fine-tune.md."
         )
     return problems
+
+
+def unusable_reason(
+    capability: tuple[int, int], arch_list: Sequence[str], torch_version: str
+) -> str | None:
+    """Why this torch build cannot launch on this card, or None if it can.
+
+    Pure, so CI can test it on a machine with no GPU at all. The wheels drop
+    architectures as they age: the cu128 builds carry nothing for Maxwell or
+    Pascal, and torch 2.11 dropped Volta with them. `torch.cuda.is_available()`
+    is perfectly happy about all three, and the launch fails later.
+    """
+    architecture = f"sm_{capability[0]}{capability[1]}"
+    for entry in arch_list:
+        level = _level(entry)
+        if level is None:
+            continue
+        if entry.startswith("sm_"):
+            # Cubins are binary-compatible forward across minor revisions of one
+            # major architecture and no further. So sm_86 runs an RTX 4090, which
+            # is sm_89 and in nobody's arch list, and sm_75 does not run a V100,
+            # which is sm_70 and the earlier minor.
+            if level[0] == capability[0] and level[1] <= capability[1]:
+                return None
+        # PTX is forward-compatible without that limit, because the driver
+        # compiles it for the card while the model loads.
+        elif level <= capability:
+            return None
+    return (
+        f"this card is {architecture} and torch {torch_version} carries kernels for "
+        f"{', '.join(arch_list) or 'nothing'}. Falling back to the CPU, which is slow "
+        "and right rather than fast and broken. `emotion-timeline preflight` says more."
+    )
+
+
+def _level(entry: str) -> tuple[int, int] | None:
+    """``"sm_86"`` and ``"compute_120"`` as (major, minor), or None if neither."""
+    digits = entry.removeprefix("sm_").removeprefix("compute_")
+    if entry == digits or not digits.isdigit() or len(digits) < 2:
+        return None
+    return int(digits[:-1]), int(digits[-1])
+
+
+def usable_device(  # pragma: no cover - needs a GPU
+    say: Callable[[str], None] | None = None,
+) -> str:
+    """``"cuda"`` when this build can actually launch here, ``"cpu"`` otherwise.
+
+    Every model in this project asked `torch.cuda.is_available()` and nothing
+    else, which is true for a card the wheel has no kernels for. The pipeline
+    then died part-way through a transcription with `no kernel image is
+    available for execution on the device` -- the failure this module was
+    written for on the training side, arriving at the other end of the project.
+    """
+    import torch
+
+    if not torch.cuda.is_available():
+        return "cpu"
+    reason = unusable_reason(
+        torch.cuda.get_device_capability(0), tuple(torch.cuda.get_arch_list()), torch.__version__
+    )
+    if reason is None:
+        return "cuda"
+    if say is not None:
+        say(reason)
+    return "cpu"
 
 
 def describe(device: Device) -> Iterator[str]:

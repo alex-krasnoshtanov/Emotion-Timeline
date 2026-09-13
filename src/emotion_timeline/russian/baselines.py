@@ -110,9 +110,13 @@ def predict(
     import torch
     from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
+    from emotion_timeline.training import preflight
+
     tokenizer = AutoTokenizer.from_pretrained(model_id)
     model = AutoModelForSequenceClassification.from_pretrained(model_id)
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    # No progress callback on this one, so an unusable card is reported by
+    # `preflight` and by the run being slow, rather than in the log.
+    device = preflight.usable_device()
     model.to(device).eval()
 
     labels = [model.config.id2label[index] for index in range(model.config.num_labels)]

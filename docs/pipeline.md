@@ -302,6 +302,54 @@ which is the thing a wheel cannot. The published images are built by
 [`release.yml`](../.github/workflows/release.yml), which runs `timeline` inside
 each one and checks the numbers before pushing it.
 
+### Which cards the app image runs on
+
+`torch 2.11.0+cu128` carries kernels for **sm_75, sm_80, sm_86, sm_90, sm_100
+and sm_120**, read out of the built image rather than recalled. A cubin is
+binary-compatible forward across the minor revisions of one major architecture,
+so that list covers more cards than it names:
+
+| | | |
+| --- | --- | --- |
+| Turing | sm_75 | T4, RTX 20-series, GTX 16-series |
+| Ampere | sm_80, sm_86 | A100, A30, RTX 30-series, A10, A40 |
+| Ada | sm_89, **via sm_86** | RTX 40-series, L4, L40S |
+| Hopper | sm_90 | H100, H200 |
+| Blackwell | sm_100, sm_120 | B200, GB200, RTX 50-series |
+
+Ada is the row worth reading twice. `sm_89` appears in no arch list torch ships
+and an RTX 4090 is the most likely card anyone points this at; it works on the
+sm_86 kernels, and a check that asked `architecture in arch_list` would have sent
+every one of them to the CPU. This one did, for about an hour.
+
+**What it will not run on.** Maxwell and Pascal were dropped from the cu128
+wheels, and torch 2.11 dropped Volta with them, so a GTX 10-series card or a
+V100 has nothing to run. Neither does anything newer than sm_120: the build
+ships no `compute_*` entry, so there is no PTX for the driver to compile forward.
+The driver floor is 525.60.13 for the CUDA 12.x family and 570 for Blackwell.
+The app image is `linux/amd64` only, because neither torch nor CTranslate2
+publishes generic aarch64 CUDA wheels; `:study` is built for arm64 as well.
+
+**None of that used to be checked.** Every model here picked its device with
+`torch.cuda.is_available()`, which is perfectly true of a card the wheel has no
+kernels for, and the run then died part of the way through a transcription with
+`no kernel image is available for execution on the device`.
+`preflight.usable_device` now asks the harder question and falls back to the CPU
+with a line saying why, which is slow and right rather than fast and broken.
+`emotion-timeline preflight` prints the whole picture, and runs inside the
+container:
+
+```bash
+docker run --rm --gpus all ghcr.io/alex-krasnoshtanov/emotion-timeline preflight
+```
+
+faster-whisper is the other half and it answers separately, being CTranslate2
+rather than torch. 4.8.2 reaches sm_120 through the driver's PTX JIT, and the
+pipeline asks it for `float16` on CUDA, which sidesteps the INT8 path that
+crashes on Blackwell with `CUBLAS_STATUS_NOT_SUPPORTED`. Verified by transcribing
+on the card rather than by reading: `get_cuda_device_count()` counts devices
+through the driver API and says nothing about whether a kernel can launch.
+
 ## What this does not establish
 
 - **None of this is an accuracy.** There are no labels on this recording. 36.2% is a

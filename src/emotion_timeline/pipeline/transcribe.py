@@ -123,10 +123,11 @@ def transcribe(  # pragma: no cover - needs the model, a GPU and audio
     one row, and grouping them into scenes is `timeline.group`'s job, with a
     threshold a reader can change.
     """
-    import torch
     from faster_whisper import WhisperModel
 
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    from emotion_timeline.training import preflight
+
+    device = preflight.usable_device(progress if callable(progress) else None)
     model = WhisperModel(
         model_id, device=device, compute_type="float16" if device == "cuda" else "int8"
     )

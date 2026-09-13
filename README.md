@@ -575,10 +575,12 @@ your own:
 docker compose up          # http://127.0.0.1:8000, on the GPU, models in a volume
 ```
 
-`:latest` is 12.1 GB, because CUDA kernels are. It runs without a card as well, on
-the CPU, which turns about a minute of work into several: the transcriber is most
-of the wall clock and `transcribe.py` picks its device from
-`torch.cuda.is_available()`.
+`:latest` is 12.1 GB, because CUDA kernels are. It runs without a card as well,
+on the CPU, which turns about a minute of work into several: the transcriber is
+most of the wall clock and it runs wherever the classifiers do. The kernels cover
+Turing through Blackwell, which is everything from a T4 to an RTX 50-series;
+[the pipeline chapter](docs/pipeline.md#which-cards-the-app-image-runs-on) lists
+what they do not cover and what happens then.
 
 Both publish to loopback rather than to every interface, because the page hands
 a URL to yt-dlp and a file to ffmpeg.

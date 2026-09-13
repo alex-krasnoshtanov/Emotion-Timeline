@@ -234,9 +234,11 @@ def predict(  # pragma: no cover - needs the checkpoint and a GPU
     import torch
     from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
+    from emotion_timeline.training import preflight
+
     tokenizer = AutoTokenizer.from_pretrained(str(model_dir))
     model = AutoModelForSequenceClassification.from_pretrained(str(model_dir), num_labels=2)
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    device = preflight.usable_device(progress if callable(progress) else None)
     model.to(device).eval()
 
     out: list[np.ndarray] = []
