@@ -78,7 +78,11 @@ jobs:
             type=raw,value=edge,enable={{is_default_branch}}
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-            type=sha,format=short
+            # `type=sha` carries its own `sha-` prefix, and a prefix set on a tag
+            # replaces the one in `flavor` rather than adding to it. Left alone,
+            # both targets published `sha-<commit>` and the second overwrote the
+            # first, so the two had to be spelled out here.
+            type=sha,format=short,prefix=${{ matrix.prefix }}sha-
             type=raw,value=study,prefix=,enable=${{ matrix.target == 'study' }}
             type=raw,value=latest,prefix=,enable=${{ matrix.target == 'app' }}
           labels: |
