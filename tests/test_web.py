@@ -450,30 +450,53 @@ def test_every_colour_the_page_uses_is_defined_in_the_light_theme() -> None:
 
 
 def test_the_dark_theme_redefines_every_colour() -> None:
-    """`--wrong` was the one token the dark block forgot: 2.4:1 on its own card."""
+    """`--wrong` was the one token the dark block forgot: 2.4:1 on its own card.
+
+    Phrased as "every token holding a colour", so adding a token that holds a
+    radius or a font stack does not need the test rewritten to stay honest.
+    """
     dark = PAGE[PAGE.index("prefers-color-scheme: dark") :]
-    dark = dark[: dark.index("* { box-sizing")]
+    dark = dark[: dark.index("}\n  }") + 4]
     light = PAGE[PAGE.index(":root {") : PAGE.index("prefers-color-scheme: dark")]
-    missing = set(re.findall(r"(--[a-z-]+):", light)) - set(re.findall(r"(--[a-z-]+):", dark))
-    assert missing == {"--radius"}, sorted(missing)
+    coloured = set(re.findall(r"(--[a-z-]+): *#[0-9a-f]{3,8}", light))
+    assert coloured, "no colour tokens found at all"
+    missing = coloured - set(re.findall(r"(--[a-z-]+):", dark))
+    assert not missing, sorted(missing)
 
 
-def test_an_emotion_chip_has_a_readable_label_either_way() -> None:
-    """White on Joy's #c98a1e is 2.9:1, so the page picks per colour rather than
-    hard-coding one. This checks the palette supports that choice at all."""
-    from emotion_timeline.figures import EMOTION_COLOURS
+def test_there_is_one_radius_and_everything_uses_it() -> None:
+    """Five radii, from a pill to 10px, is what read as furniture."""
+    used = set(re.findall(r"border-radius: *([^;]+);", PAGE))
+    assert used == {"var(--r)"}, sorted(used)
 
-    def luminance(value: str) -> float:
-        parts = [int(value[i : i + 2], 16) / 255 for i in (1, 3, 5)]
-        linear = [c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4 for c in parts]
-        return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2]
 
-    for name, colour in EMOTION_COLOURS.items():
-        light = luminance(colour)
-        best = max((light + 0.05) / 0.05, 1.05 / (light + 0.05))
-        assert best >= 4.5, f"{name} {colour} reads at {best:.2f}:1 against both"
+def test_nothing_in_the_chrome_competes_with_the_emotion_colours() -> None:
+    """The palette is the only information on this page that is coloured.
 
-    assert "readable(META.colours[r.emotion])" in PAGE
+    So the chrome tokens are greyscale: red, green and blue within a few points
+    of each other. `--wrong` is the one exception, because an error has to read
+    as one.
+    """
+    light = PAGE[PAGE.index(":root {") : PAGE.index("prefers-color-scheme: dark")]
+    for name, value in re.findall(r"(--[a-z-]+): *#([0-9a-f]{6})", light):
+        if name == "--wrong":
+            continue
+        red, green, blue = (int(value[i : i + 2], 16) for i in (0, 2, 4))
+        assert max(red, green, blue) - min(red, green, blue) <= 12, f"{name} #{value} is coloured"
+
+
+def test_no_text_is_ever_set_on_an_emotion_colour() -> None:
+    """White on Joy's #c98a1e was 2.9:1, and a pill badge was the wrong shape.
+
+    An emotion now reads as a swatch beside its name, which is what the chart
+    does, so there is no text-on-colour contrast problem left to get wrong.
+    """
+    assert 'class="swatch"' in PAGE
+    assert "chip" not in PAGE
+    # The swatch takes the fill and nothing else; a colour set next to a colour
+    # in the same rule would mean text on top of it again.
+    for style in re.findall(r'style="(background:[^"]*)"', PAGE):
+        assert "color" not in style, style
 
 
 def test_the_markup_closes_everything_it_opens() -> None:
