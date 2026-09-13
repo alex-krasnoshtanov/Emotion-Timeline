@@ -115,6 +115,7 @@ def transcribe(  # pragma: no cover - needs the model, a GPU and audio
     model_id: str = MODEL,
     language: str = "ru",
     progress: object = None,
+    vad: bool = True,
 ) -> list[Segment]:
     """Timestamped segments, in order, as Whisper produced them.
 
@@ -129,7 +130,7 @@ def transcribe(  # pragma: no cover - needs the model, a GPU and audio
     model = WhisperModel(
         model_id, device=device, compute_type="float16" if device == "cuda" else "int8"
     )
-    segments, info = model.transcribe(str(audio), language=language, vad_filter=True)
+    segments, info = model.transcribe(str(audio), language=language, vad_filter=vad)
 
     out: list[Segment] = []
     for segment in segments:

@@ -154,6 +154,35 @@ against **0.384** where they split. Two signals never fitted to each other point
 the same way. It is mild corroboration that agreement tracks something, and the
 gap is small enough that it is worth no more than that.
 
+### The voice-activity filter drops narration over music
+
+`faster-whisper` takes `vad_filter`, which runs a voice-activity detector and
+transcribes only what it calls speech. It is usually on for a good reason: it
+stops Whisper hallucinating loops over silence. On this recording it costs more
+than it saves.
+
+| | Segments | Speech captured | Largest gap |
+| --- | ---: | ---: | ---: |
+| AssemblyAI | 316 | 48.6 min | 18.5s |
+| Whisper, `vad_filter=True` | 947 | 41.1 min | **44.4s** |
+| Whisper, `--no-vad` | 913 | 41.8 min | 25.3s |
+
+The 44-second gap is the episode's opening narration — *"Манаус, самый большой
+мегаполис Северной Бразилии…"* — delivered over a music bed. The detector hears
+music and drops the voice with it. AssemblyAI transcribes the paragraph;
+`--no-vad` recovers most of it.
+
+**And the hallucination it guards against did not appear.** Back-to-back repeated
+segments, the signature of a Whisper loop, number two either way. So on this
+material the filter has no upside to weigh against the paragraph it ate.
+
+The general point is the one worth keeping: **the filter's failure is silent and
+hallucination's failure is loud.** A dropped paragraph leaves a gap nobody
+notices; a hallucination loop is visible in the first ten rows of the CSV. For a
+pipeline whose claim is that its output can be checked, the loud failure is the
+one to prefer. That is one recording, though, so `--no-vad` is a flag rather than
+a new default, and the committed transcript is still the filtered one.
+
 ## Running it on a video of your own
 
 ```bash
@@ -173,7 +202,8 @@ of YouTube audio and that is the mistake not to repeat.
 
 `--language ru` is passed rather than detected. Auto-detection reads the first
 thirty seconds, so a recording that opens on music or a title card can come back
-as the wrong language and transcribe into it without complaining.
+as the wrong language and transcribe into it without complaining. `--no-vad` is
+worth trying on anything with a score under the narration, for the reason above.
 
 ## What this does not establish
 

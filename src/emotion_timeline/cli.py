@@ -794,7 +794,9 @@ def cmd_transcribe(args: argparse.Namespace) -> int:  # pragma: no cover - needs
 
     audio = transcribe.fetch_audio(args.source, args.downloads)
     print(f"audio: {audio}")
-    segments = transcribe.transcribe(audio, args.model, args.language, progress=print)
+    segments = transcribe.transcribe(
+        audio, args.model, args.language, progress=print, vad=not args.no_vad
+    )
     written = transcribe.write_segments(segments, args.out)
     minutes = segments[-1].end_s / 60 if segments else 0.0
     print(f"{len(segments):,} segments over {minutes:.1f} minutes")
@@ -1333,6 +1335,11 @@ def build_parser() -> argparse.ArgumentParser:
     transcribe_parser.add_argument("--model", default=TURBO)
     transcribe_parser.add_argument(
         "--language", default="ru", help="passed rather than detected; see the module docstring"
+    )
+    transcribe_parser.add_argument(
+        "--no-vad",
+        action="store_true",
+        help="keep everything Whisper hears; the voice-activity filter drops speech over music",
     )
     transcribe_parser.set_defaults(func=cmd_transcribe)
 
