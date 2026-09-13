@@ -6,7 +6,15 @@
 #   --target study   core + web.  Every command that reads a committed record,
 #                    and the browser page serving the committed example. ~400 MB.
 #   --target app     everything above plus ffmpeg, Whisper and the classifiers,
-#                    so it runs the whole pipeline on a video of your own.
+#                    built against CUDA, so it runs the whole pipeline on a
+#                    video of your own. Large, because CUDA kernels are.
+#
+#                      docker run --gpus all -p 127.0.0.1:8000:8000 ...
+#
+#                    Without `--gpus all`, or on a machine with no NVIDIA card,
+#                    it still runs: torch reports no CUDA and everything falls
+#                    back to the CPU. A 52-minute recording takes minutes that
+#                    way rather than about one.
 #
 # The project is installed into /app rather than into site-packages on purpose.
 # Every read-only command finds its records relative to its own file, so a wheel
@@ -88,12 +96,21 @@ RUN apt-get update \
  && apt-get install -y --no-install-recommends ffmpeg \
  && rm -rf /var/lib/apt/lists/*
 
-# torch here is the CPU build, pinned that way in `pyproject.toml` for Linux:
-# a container has no GPU without the nvidia runtime, and the CUDA wheel brings
-# forty-three nvidia packages and several gigabytes with it. The GPU stage in
-# this project is the fine-tune, and that runs on the host.
+# torch comes from the cu128 index, the same one the Windows machine uses, so
+# the sm_120 kernels this project's card needs are actually in here. That is
+# most of the image's size and all of its speed: `transcribe.py` asks torch
+# whether CUDA is there and hands the answer to faster-whisper, so a CPU-only
+# torch would put Whisper on the CPU as well, and Whisper is the wall clock.
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --extra web --extra stt --extra model
+
+# faster-whisper is CTranslate2 rather than torch, and it dynamically loads
+# cuBLAS and cuDNN by name. torch brings both as pip packages but only puts them
+# on its own loader path, so without this the classifiers would find the GPU and
+# the transcriber would not.
+RUN printf '%s\n' /opt/venv/lib/python3*/site-packages/nvidia/*/lib \
+      > /etc/ld.so.conf.d/nvidia-from-pip.conf \
+ && ldconfig
 
 # Both caches go to the volume, so the first run's download survives the second.
 ENV HF_HOME=/data/models \

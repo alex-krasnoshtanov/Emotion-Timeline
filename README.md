@@ -568,11 +568,17 @@ docker run --rm ghcr.io/alex-krasnoshtanov/emotion-timeline:study timeline
 Two images come out of one Dockerfile, split the same way the extras are.
 `:study` is about 400 MB and runs every command that reads a committed record,
 plus the page serving the committed example. `:latest` adds ffmpeg, Whisper and
-the classifiers, so it runs the whole pipeline on a video of your own:
+the classifiers, built against CUDA, and runs the whole pipeline on a video of
+your own:
 
 ```bash
-docker compose up          # http://127.0.0.1:8000, models cached in a volume
+docker compose up          # http://127.0.0.1:8000, on the GPU, models in a volume
 ```
+
+`:latest` is several gigabytes because CUDA kernels are. It runs without a card
+as well, on the CPU, which turns about a minute of work into several: the
+transcriber is most of the wall clock and `transcribe.py` picks its device from
+`torch.cuda.is_available()`.
 
 Both publish to loopback rather than to every interface, because the page hands
 a URL to yt-dlp and a file to ffmpeg.

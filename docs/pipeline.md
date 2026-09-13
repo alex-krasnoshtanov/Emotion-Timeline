@@ -272,7 +272,14 @@ example, and disables the run button with a line saying why.
 
 **Two images, for the two things people want.** `ghcr.io/...:study` is core plus
 the page, about 400 MB, and runs every command that reads a committed record.
-`ghcr.io/...:latest` adds ffmpeg, Whisper and the classifiers. Both install the
+`ghcr.io/...:latest` adds ffmpeg, Whisper and the classifiers, built against
+CUDA and run with `--gpus all`. It is several gigabytes, and worth it: the
+transcriber is most of the wall clock, and it takes its device from
+`torch.cuda.is_available()`, so a CPU-only torch would slow down the one stage
+that matters. faster-whisper is CTranslate2 rather than torch and loads cuBLAS
+and cuDNN by name, so the image puts torch's copies of both on the loader path;
+without that the classifiers would find the card and the transcriber would not.
+Both install the
 project into `/app` rather than into site-packages, because the commands find
 their records relative to their own file: the image ships the repository layout,
 which is the thing a wheel cannot. The published images are built by

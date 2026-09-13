@@ -4,7 +4,9 @@ name: Publish images
 #
 #   :study   core + web. Every command that reads a committed record, and the
 #            page serving the committed example. No torch, no ffmpeg, ~400 MB.
-#   :latest  the whole pipeline, from a link or a file.
+#   :latest  the whole pipeline, from a link or a file, built against CUDA.
+#            Several gigabytes, most of it kernels. Runs on the CPU without a
+#            card, and takes minutes instead of about one.
 #
 # A tag publishes a version. A push to main republishes :edge, so the image and
 # the branch cannot drift. A pull request builds both and runs them, and pushes
@@ -45,12 +47,26 @@ jobs:
             prefix: "study-"
             platforms: linux/amd64,linux/arm64
             ffmpeg: "False"
+            # Small enough to export every layer to the cache.
+            cache: max
           - target: app
             prefix: ""
             platforms: linux/amd64
             ffmpeg: "True"
+            # The Actions cache holds 10 GB for the whole repository and this
+            # image is most of that on its own, so only the final layers go in.
+            cache: min
     steps:
       - uses: actions/checkout@v7
+
+      # A hosted runner ships with several gigabytes of toolchains this build
+      # never touches, and the CUDA image does not fit alongside them.
+      - name: Make room for the CUDA layers
+        if: matrix.target == 'app'
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+                      /usr/local/share/boost "${AGENT_TOOLSDIRECTORY:-}"
+          df -h /
 
       - uses: docker/setup-qemu-action@v3
         if: contains(matrix.platforms, 'arm64')
@@ -74,14 +90,14 @@ jobs:
           flavor: |
             latest=false
             prefix=${{ matrix.prefix }}
+          # `type=sha` below carries its own `sha-` prefix, and a prefix set on a
+          # tag replaces the one in `flavor` rather than adding to it. Left
+          # alone, both targets published `sha-<commit>` and the second
+          # overwrote the first, so the two are spelled out.
           tags: |
             type=raw,value=edge,enable={{is_default_branch}}
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-            # `type=sha` carries its own `sha-` prefix, and a prefix set on a tag
-            # replaces the one in `flavor` rather than adding to it. Left alone,
-            # both targets published `sha-<commit>` and the second overwrote the
-            # first, so the two had to be spelled out here.
             type=sha,format=short,prefix=${{ matrix.prefix }}sha-
             type=raw,value=study,prefix=,enable=${{ matrix.target == 'study' }}
             type=raw,value=latest,prefix=,enable=${{ matrix.target == 'app' }}
@@ -98,7 +114,7 @@ jobs:
           load: true
           tags: emotion-timeline:check
           cache-from: type=gha,scope=${{ matrix.target }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.target }}
+          cache-to: type=gha,mode=${{ matrix.cache }},scope=${{ matrix.target }}
 
       # An image that cannot find its own records is the failure worth catching.
       # The CLI reads them relative to its own file, so a layout mistake in the
@@ -129,6 +145,25 @@ jobs:
           PY
           docker rm -f check
 
+      # Two ways the GPU build goes quietly wrong, and neither shows up on a
+      # runner with no card. The wheel can be the CPU one, which would put
+      # Whisper on the CPU as well because `transcribe.py` asks torch. And
+      # CTranslate2 loads cuBLAS and cuDNN by name rather than through torch, so
+      # without the ldconfig entry the classifiers would find the GPU and the
+      # transcriber would not.
+      - name: It is built for the GPU, and survives not having one
+        if: matrix.target == 'app'
+        run: |
+          docker run --rm --entrypoint bash emotion-timeline:check -c \
+            'ldconfig -p | grep -Eq "libcudnn|libcublas"'
+          docker run --rm -i --entrypoint python emotion-timeline:check - <<'PY'
+          import ctranslate2, torch
+          print("torch", torch.__version__)
+          assert "+cu" in torch.__version__, "the CPU wheel shipped by mistake"
+          print("cuda on this runner:", torch.cuda.is_available())
+          print("ctranslate2 devices:", ctranslate2.get_cuda_device_count())
+          PY
+
       - name: Push it
         id: push
         if: github.event_name != 'pull_request'
@@ -142,7 +177,7 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           annotations: ${{ steps.meta.outputs.annotations }}
           cache-from: type=gha,scope=${{ matrix.target }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.target }}
+          cache-to: type=gha,mode=${{ matrix.cache }},scope=${{ matrix.target }}
           provenance: mode=max
           sbom: true
 

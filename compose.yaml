@@ -1,4 +1,4 @@
-# docker compose up            the full pipeline, on http://127.0.0.1:8000
+# docker compose up            the full pipeline on the GPU, on http://127.0.0.1:8000
 # docker compose up study      the committed example only, and every read-only
 #                              command, without the model download
 #
@@ -20,6 +20,16 @@ services:
       # Whisper and the two classifiers land here on first run, about 3 GB, and
       # stay for the next one.
       - timeline-data:/data
+    # The card, if there is one. Needs the NVIDIA Container Toolkit on Linux, or
+    # Docker Desktop with WSL2 on Windows. Comment the block out and it runs on
+    # the CPU instead: same answers, minutes rather than about one.
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
     restart: unless-stopped
 
   study:
