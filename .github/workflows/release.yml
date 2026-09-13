@@ -3,10 +3,10 @@ name: Publish images
 # Two images from one Dockerfile, matching the split in pyproject.toml's extras:
 #
 #   :study   core + web. Every command that reads a committed record, and the
-#            page serving the committed example. No torch, no ffmpeg, ~400 MB.
+#            page serving the committed example. No torch, no ffmpeg, 592 MB.
 #   :latest  the whole pipeline, from a link or a file, built against CUDA.
-#            Several gigabytes, most of it kernels. Runs on the CPU without a
-#            card, and takes minutes instead of about one.
+#            12.1 GB, most of it kernels. Runs on the CPU without a card, and
+#            takes minutes instead of about one.
 #
 # A tag publishes a version. A push to main republishes :edge, so the image and
 # the branch cannot drift. A pull request builds both and runs them, and pushes
@@ -47,14 +47,19 @@ jobs:
             prefix: "study-"
             platforms: linux/amd64,linux/arm64
             ffmpeg: "False"
-            # Small enough to export every layer to the cache.
+            # Cheap to scan, so it gets a bill of materials, and small
+            # enough that caching every intermediate layer is free.
+            sbom: "true"
             cache: max
           - target: app
             prefix: ""
             platforms: linux/amd64
             ffmpeg: "True"
-            # The Actions cache holds 10 GB for the whole repository and this
-            # image is most of that on its own, so only the final layers go in.
+            # Scanning eleven gigabytes of CUDA layers costs minutes and tells
+            # nobody anything they could not read in uv.lock. `mode=min` for
+            # the same reason: the expensive layer is in the final image
+            # anyway, so `max` would upload eleven gigabytes twice.
+            sbom: "false"
             cache: min
     steps:
       - uses: actions/checkout@v7
@@ -72,8 +77,19 @@ jobs:
         if: contains(matrix.platforms, 'arm64')
       - uses: docker/setup-buildx-action@v3
 
+      # `docker/metadata-action` lowercases the image name for us and a raw ref
+      # in `cache-to` does not, so `Emotion-Timeline` would be rejected by the
+      # registry. The layer cache also gets a package of its own rather than
+      # half a dozen `buildcache-*` tags on the one people actually pull.
+      - name: A ref the registry will accept
+        id: name
+        env:
+          REPOSITORY: ${{ github.repository }}
+        run: echo "cache=ghcr.io/${REPOSITORY,,}/buildcache" >> "$GITHUB_OUTPUT"
+
+      # Not conditional on the event: a pull request pushes nothing, but it
+      # still wants to read the build cache rather than rebuild eight gigabytes.
       - name: Sign in to the registry
-        if: github.event_name != 'pull_request'
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
@@ -113,8 +129,8 @@ jobs:
           target: ${{ matrix.target }}
           load: true
           tags: emotion-timeline:check
-          cache-from: type=gha,scope=${{ matrix.target }}
-          cache-to: type=gha,mode=${{ matrix.cache }},scope=${{ matrix.target }}
+          cache-from: type=registry,ref=${{ steps.name.outputs.cache }}:${{ matrix.target }}
+          cache-to: type=registry,ref=${{ steps.name.outputs.cache }}:${{ matrix.target }},mode=${{ matrix.cache }},image-manifest=true,oci-mediatypes=true
 
       # An image that cannot find its own records is the failure worth catching.
       # The CLI reads them relative to its own file, so a layout mistake in the
@@ -157,9 +173,13 @@ jobs:
           docker run --rm --entrypoint bash emotion-timeline:check -c \
             'ldconfig -p | grep -Eq "libcudnn|libcublas"'
           docker run --rm -i --entrypoint python emotion-timeline:check - <<'PY'
+          import importlib.util as u
           import ctranslate2, torch
           print("torch", torch.__version__)
           assert "+cu" in torch.__version__, "the CPU wheel shipped by mistake"
+          # Left out as 641 MB of JIT nothing here calls. torch importing at
+          # all is the check that it was safe to leave out.
+          assert u.find_spec("triton") is None, "triton is back, and the image is bigger for it"
           print("cuda on this runner:", torch.cuda.is_available())
           print("ctranslate2 devices:", ctranslate2.get_cuda_device_count())
           PY
@@ -176,10 +196,9 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           annotations: ${{ steps.meta.outputs.annotations }}
-          cache-from: type=gha,scope=${{ matrix.target }}
-          cache-to: type=gha,mode=${{ matrix.cache }},scope=${{ matrix.target }}
+          cache-from: type=registry,ref=${{ steps.name.outputs.cache }}:${{ matrix.target }}
           provenance: mode=max
-          sbom: true
+          sbom: ${{ matrix.sbom }}
 
       - name: Say what was published
         if: github.event_name != 'pull_request'

@@ -271,14 +271,30 @@ failing at the end of a run. That is also what makes the small container honest:
 example, and disables the run button with a line saying why.
 
 **Two images, for the two things people want.** `ghcr.io/...:study` is core plus
-the page, about 400 MB, and runs every command that reads a committed record.
+the page, 592 MB, and runs every command that reads a committed record.
 `ghcr.io/...:latest` adds ffmpeg, Whisper and the classifiers, built against
-CUDA and run with `--gpus all`. It is several gigabytes, and worth it: the
-transcriber is most of the wall clock, and it takes its device from
-`torch.cuda.is_available()`, so a CPU-only torch would slow down the one stage
-that matters. faster-whisper is CTranslate2 rather than torch and loads cuBLAS
-and cuDNN by name, so the image puts torch's copies of both on the loader path;
-without that the classifiers would find the card and the transcriber would not.
+CUDA and run with `--gpus all`. It is 12.1 GB, and worth it: the transcriber is
+most of the wall clock, and it takes its device from `torch.cuda.is_available()`,
+so a CPU-only torch would slow down the one stage that matters. faster-whisper is
+CTranslate2 rather than torch and loads cuBLAS and cuDNN by name, so the image
+puts torch's copies of both on the loader path; without that the classifiers
+would find the card and the transcriber would not.
+
+**Both are smaller than they were**, by measurement rather than by guess: the
+study image went from 801 MB to 592 MB and the app one from 13.5 GB to 12.1 GB.
+
+| | |
+| --- | --- |
+| uv is bind-mounted for one `RUN` and never copied | −52 MB each |
+| bytecode compilation off | −157 MB on the study image, for 100 ms on a command that takes a second |
+| the app image built from the same base as the study one rather than *from* it | −412 MB, a virtual environment left underneath the one that replaced it |
+| `triton` left out, being a JIT nothing here calls | −641 MB |
+
+`nccl` and `nvshmem` look equally droppable on a single card and are not: torch
+2.11 links both into `_C`, and removing either breaks `import torch` outright.
+That was found by deleting them inside the running container on an actual GPU,
+which is the only reason this file does not confidently leave them out too.
+
 Both install the
 project into `/app` rather than into site-packages, because the commands find
 their records relative to their own file: the image ships the repository layout,

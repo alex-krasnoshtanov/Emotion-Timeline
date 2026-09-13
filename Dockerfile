@@ -4,7 +4,7 @@
 # split this project the same way:
 #
 #   --target study   core + web.  Every command that reads a committed record,
-#                    and the browser page serving the committed example. ~400 MB.
+#                    and the browser page serving the committed example.
 #   --target app     everything above plus ffmpeg, Whisper and the classifiers,
 #                    built against CUDA, so it runs the whole pipeline on a
 #                    video of your own. Large, because CUDA kernels are.
@@ -23,7 +23,6 @@
 #
 #   docker build --target study -t emotion-timeline:study .
 #   docker run --rm emotion-timeline:study timeline
-#   docker run --rm -p 127.0.0.1:8000:8000 emotion-timeline:study
 
 ARG PYTHON_VERSION=3.12
 ARG UV_VERSION=0.9
@@ -36,16 +35,16 @@ FROM python:${PYTHON_VERSION}-slim AS base
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     UV_LINK_MODE=copy \
-    UV_COMPILE_BYTECODE=1 \
+    UV_NO_DEV=1 \
+    UV_FROZEN=1 \
     UV_PYTHON_DOWNLOADS=never \
     UV_PROJECT_ENVIRONMENT=/opt/venv \
     PATH=/opt/venv/bin:$PATH
 
-COPY --from=uv /uv /usr/local/bin/uv
 WORKDIR /app
 
-# /data is the only writable path, so the image runs read-only if you ask it to.
-# `models/` is a symlink into it because that is where the CLI's defaults point.
+# /data is the only path the container writes to, so `models/` is a symlink into
+# it: that is where the CLI's own defaults point.
 RUN useradd --create-home --uid 10001 timeline \
  && install -d -o timeline -g timeline \
       /data /data/downloads /data/models /data/cache /data/cache/matplotlib \
@@ -55,20 +54,36 @@ RUN useradd --create-home --uid 10001 timeline \
 # put it. Every command that draws anything imports it, `timeline` included.
 ENV MPLCONFIGDIR=/data/cache/matplotlib
 
-# --- dependencies, cached apart from the source -------------------------------
-FROM base AS deps
-COPY pyproject.toml uv.lock README.md LICENSE ./
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev --no-install-project --extra web
+# uv is mounted for the length of a RUN and never copied, so it does no work in
+# the shipped image and costs none of its 52 MB. pyproject and the lock are
+# mounted for the same reason and one better: a README edit no longer
+# invalidates the dependency layer, which is most of both images.
+#
+# Two `uv sync` calls per target, always. The first resolves dependencies from
+# the lock alone, so it is cached until the lock changes; the second installs
+# the project, which is a few hundred kilobytes and changes constantly.
 
-# --- study: everything that reads a committed record --------------------------
-FROM deps AS study
-COPY src/ ./src/
-COPY benchmarks/ ./benchmarks/
-COPY assets/ ./assets/
-COPY docs/ ./docs/
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev --extra web
+# --- study --------------------------------------------------------------------
+FROM base AS study-deps
+RUN --mount=from=uv,source=/uv,target=/usr/local/bin/uv \
+    --mount=type=cache,target=/root/.cache/uv \
+    --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
+    --mount=type=bind,source=uv.lock,target=uv.lock \
+    uv sync --no-install-project --extra web
+
+FROM study-deps AS study
+COPY --link README.md LICENSE ./
+COPY --link src/ ./src/
+RUN --mount=from=uv,source=/uv,target=/usr/local/bin/uv \
+    --mount=type=cache,target=/root/.cache/uv \
+    --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
+    --mount=type=bind,source=uv.lock,target=uv.lock \
+    uv sync --extra web
+
+# After the install, so editing a record rebuilds nothing but its own layer.
+COPY --link benchmarks/ ./benchmarks/
+COPY --link assets/ ./assets/
+COPY --link docs/ ./docs/
 
 LABEL org.opencontainers.image.title="Emotion Timeline" \
       org.opencontainers.image.description="Per-scene emotion analysis: the study, and the page that reads it" \
@@ -86,23 +101,45 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
 ENTRYPOINT ["emotion-timeline"]
 CMD ["serve", "--host", "0.0.0.0", "--downloads", "/data/downloads"]
 
-# --- app: the whole pipeline --------------------------------------------------
-FROM study AS app
-USER root
+# --- app ----------------------------------------------------------------------
+# From `base` rather than from `study`: inheriting it would leave study's own
+# 412 MB virtual environment in the image underneath the one that replaces it,
+# and a layer that is overwritten is still a layer that is pulled.
+FROM base AS app-deps
 
 # ffmpeg is what turns a download into 16 kHz mono, and `serve` warns on start
 # when it is missing.
-RUN apt-get update \
- && apt-get install -y --no-install-recommends ffmpeg \
- && rm -rf /var/lib/apt/lists/*
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    rm -f /etc/apt/apt.conf.d/docker-clean \
+ && apt-get update \
+ && apt-get install -y --no-install-recommends ffmpeg
 
 # torch comes from the cu128 index, the same one the Windows machine uses, so
 # the sm_120 kernels this project's card needs are actually in here. That is
 # most of the image's size and all of its speed: `transcribe.py` asks torch
 # whether CUDA is there and hands the answer to faster-whisper, so a CPU-only
 # torch would put Whisper on the CPU as well, and Whisper is the wall clock.
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev --extra web --extra stt --extra model
+#
+# `triton` is the torch.compile JIT and nothing here calls torch.compile, so it
+# is 641 MB of LLVM that never runs. `tests/test_container.py` asserts that stays
+# true, because that is what the saving rests on.
+#
+# Its two obvious neighbours stay. `nccl` is multi-GPU collectives and `nvshmem`
+# is multi-node shared memory, neither of which a single card needs -- but torch
+# 2.11 links both into `_C`, so dropping either costs `import torch` itself:
+#
+#   ImportError: libnvshmem_host.so.3: cannot open shared object file
+#   ImportError: libnccl.so.2: cannot open shared object file
+#
+# That was measured on the card rather than reasoned about, which is the only
+# reason it is not in here.
+RUN --mount=from=uv,source=/uv,target=/usr/local/bin/uv \
+    --mount=type=cache,target=/root/.cache/uv \
+    --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
+    --mount=type=bind,source=uv.lock,target=uv.lock \
+    uv sync --no-install-project --extra web --extra stt --extra model \
+      --no-install-package triton
 
 # faster-whisper is CTranslate2 rather than torch, and it dynamically loads
 # cuBLAS and cuDNN by name. torch brings both as pip packages but only puts them
@@ -112,11 +149,34 @@ RUN printf '%s\n' /opt/venv/lib/python3*/site-packages/nvidia/*/lib \
       > /etc/ld.so.conf.d/nvidia-from-pip.conf \
  && ldconfig
 
+FROM app-deps AS app
+COPY --link README.md LICENSE ./
+COPY --link src/ ./src/
+RUN --mount=from=uv,source=/uv,target=/usr/local/bin/uv \
+    --mount=type=cache,target=/root/.cache/uv \
+    --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
+    --mount=type=bind,source=uv.lock,target=uv.lock \
+    uv sync --extra web --extra stt --extra model \
+      --no-install-package triton
+
+COPY --link benchmarks/ ./benchmarks/
+COPY --link assets/ ./assets/
+COPY --link docs/ ./docs/
+
 # Both caches go to the volume, so the first run's download survives the second.
 ENV HF_HOME=/data/models \
     XDG_CACHE_HOME=/data/cache
 
-LABEL org.opencontainers.image.description="Per-scene emotion analysis: the full pipeline, from a link or a file"
+LABEL org.opencontainers.image.title="Emotion Timeline" \
+      org.opencontainers.image.description="Per-scene emotion analysis: the full pipeline, from a link or a file" \
+      org.opencontainers.image.source="https://github.com/alex-krasnoshtanov/Emotion-Timeline" \
+      org.opencontainers.image.licenses="MIT"
 
 USER timeline
+EXPOSE 8000
 VOLUME ["/data"]
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD python -c "import urllib.request as u; u.urlopen('http://127.0.0.1:8000/api/meta')"
+
+ENTRYPOINT ["emotion-timeline"]
+CMD ["serve", "--host", "0.0.0.0", "--downloads", "/data/downloads"]
