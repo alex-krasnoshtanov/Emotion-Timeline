@@ -46,11 +46,23 @@ seconds, and five gives ten, which is a chapter list rather than a timeline. The
 threshold is one flag, it is recorded, and a reader can check it against the
 transcript by eye — three things PySceneDetect was not.
 
-**Intensity is the calibration.** The original gated each emotion behind a
-separate intensity model trained on nothing anybody could check. A temperature
-fitted on held-out validation rows answers the same question — which scenes to
-believe — with a number behind it and one fewer untested component. The strip
-under the timeline is that number.
+**Intensity is the calibration, for now.** The original ran a second model for
+intensity, and an audit of the source repos corrected what this chapter used to
+say about it: it was not a homemade guess but
+[a published multilingual valence–arousal regressor](https://arxiv.org/abs/2302.14021)
+(Mendes & Martins, ECIR 2023), XLM-RoBERTa-large, trained on 34 psycho-linguistic
+datasets and working on Russian without translation. What was never checked was
+its *output* — no score against any labelled set, and arousal cut into five
+"intensity levels" at 0.2/0.4/0.6/0.8, thresholds nothing justified. On this very
+recording those buckets collapse: the original's own plot puts almost every
+segment between 0.2 and 0.8, so two of the five levels are all but empty.
+
+So the strip under this timeline is a calibrated confidence instead — a number
+fitted on held-out validation rows, measuring *how sure the classifier is* rather
+than how energetic the speech is. Those are different quantities and confidence is
+the weaker stand-in; it is here because it could be checked and the arousal
+dimension had not been. Adding arousal properly is open work, and
+[the README says so](../README.md#scope).
 
 **Translation is a pinned artefact.** `Helsinki-NLP/opus-mt-ru-en`, greedy
 decoding, no beams. The original called a local LLM server with a configurable

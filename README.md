@@ -597,8 +597,15 @@ numbers from a command, and ends its chapter by saying what it does not establis
 | Russian, and what translation costs | `russian`, `compare-russian`, `translation-cost` | [russian.md](docs/russian.md) |
 | The timeline, on a real recording | `timeline`, `score-timeline`, `serve` | [pipeline.md](docs/pipeline.md) |
 
-**Still open.** The nine families rerun on one feature pipeline and one held-out
-split, which is the only thing that would repair the ranking withdrawn above. And
+**Still open.** A measured arousal dimension. The original ran a published
+multilingual valence–arousal model
+([Mendes & Martins, ECIR 2023](https://arxiv.org/abs/2302.14021)) and never scored
+it; this rebuild replaced it with calibrated confidence, which is checkable but
+answers a different question. Arousal *can* be scored — against EmoBank, and
+against this project's own labels, where it should separate Anger/Fear/Surprise
+from Sadness/Neutral — so it belongs in scope rather than in the cut list. Then:
+the nine families rerun on one feature pipeline and one held-out split, which is
+the only thing that would repair the ranking withdrawn above. And
 a Russian emotion corpus that is not translated social-media text — the one
 experiment every number in the Russian chapter is waiting on, and the one that
 cannot be run, because 24,766 rows is what exists.

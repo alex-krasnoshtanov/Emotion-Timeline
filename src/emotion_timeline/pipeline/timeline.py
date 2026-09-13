@@ -24,10 +24,14 @@ carried in a ``second_opinion`` column, because where the two agree accuracy was
 0.5604 against 0.4816 overall. That is a *where to look* signal rather than a
 better classifier, and it is drawn as one: the band is hatched where they split.
 
-**Confidence replaces the intensity model.** The original gated emotion behind a
-separate intensity classifier trained on nothing anybody could check. A
-temperature fitted on held-out validation rows does the same job -- which scenes
-to believe -- with a number behind it and one fewer component.
+**Confidence stands in for the intensity model.** The original ran a published
+multilingual valence-arousal regressor (Mendes & Martins, ECIR 2023) and used its
+arousal dimension as intensity, cut into five levels at 0.2/0.4/0.6/0.8. The model
+is real; the thresholds and the unscored output were not checked. A temperature
+fitted on held-out validation rows is used here instead, because it could be
+verified -- but it measures *how sure the classifier is*, which is not the same
+quantity as how energetic the speech is. Treat the strip as confidence, not
+intensity.
 
 **The unit of classification is a chunk, not a transcript row.** Ask the models
 about whatever rows the transcriber emitted and part of the answer is the
