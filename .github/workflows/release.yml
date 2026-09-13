@@ -1,0 +1,156 @@
+name: Publish images
+
+# Two images from one Dockerfile, matching the split in pyproject.toml's extras:
+#
+#   :study   core + web. Every command that reads a committed record, and the
+#            page serving the committed example. No torch, no ffmpeg, ~400 MB.
+#   :latest  the whole pipeline, from a link or a file.
+#
+# A tag publishes a version. A push to main republishes :edge, so the image and
+# the branch cannot drift. A pull request builds both and runs them, and pushes
+# nothing.
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE: ${{ github.repository }}
+
+jobs:
+  publish:
+    name: ${{ matrix.target }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # No torch in this one, so building for Apple Silicon under emulation
+          # costs a couple of minutes rather than most of an hour.
+          - target: study
+            prefix: "study-"
+            platforms: linux/amd64,linux/arm64
+            ffmpeg: "False"
+          - target: app
+            prefix: ""
+            platforms: linux/amd64
+            ffmpeg: "True"
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: docker/setup-qemu-action@v3
+        if: contains(matrix.platforms, 'arm64')
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Sign in to the registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # One package, two tag families: `study-*` and the unprefixed rest. The
+      # two bare tags -- `study` and `latest` -- clear the prefix themselves.
+      - name: Work out the tags
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE }}
+          flavor: |
+            latest=false
+            prefix=${{ matrix.prefix }}
+          tags: |
+            type=raw,value=edge,enable={{is_default_branch}}
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,format=short
+            type=raw,value=study,prefix=,enable=${{ matrix.target == 'study' }}
+            type=raw,value=latest,prefix=,enable=${{ matrix.target == 'app' }}
+          labels: |
+            org.opencontainers.image.documentation=https://github.com/${{ github.repository }}/blob/main/docs/pipeline.md
+
+      # Built for this runner's architecture first and loaded, so the next steps
+      # can actually run it. The push below reuses every layer.
+      - name: Build it
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: ${{ matrix.target }}
+          load: true
+          tags: emotion-timeline:check
+          cache-from: type=gha,scope=${{ matrix.target }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.target }}
+
+      # An image that cannot find its own records is the failure worth catching.
+      # The CLI reads them relative to its own file, so a layout mistake in the
+      # Dockerfile breaks twenty commands and nothing else would notice.
+      - name: It can read its own records
+        run: |
+          docker run --rm emotion-timeline:check --version
+          docker run --rm emotion-timeline:check timeline | tee out.txt
+          grep -q "316 segments over 51.6 minutes" out.txt
+          grep -q "47 scenes" out.txt
+          docker run --rm emotion-timeline:check russian > /dev/null
+          docker run --rm emotion-timeline:check errors > /dev/null
+
+      - name: It serves the page
+        run: |
+          docker run --rm -d --name check -p 127.0.0.1:8000:8000 emotion-timeline:check
+          for _ in $(seq 1 30); do
+            curl -sf http://127.0.0.1:8000/api/meta -o meta.json && break
+            sleep 1
+          done
+          curl -sf http://127.0.0.1:8000/ | grep -q "Emotion Timeline"
+          python3 - <<'PY'
+          import json
+          meta = json.load(open("meta.json"))
+          assert meta["demo_available"], "the committed timeline did not ship"
+          assert str(meta["ffmpeg_available"]) == "${{ matrix.ffmpeg }}", meta
+          print("stages:", meta["stages"], "| pipeline:", meta["pipeline_available"])
+          PY
+          docker rm -f check
+
+      - name: Push it
+        id: push
+        if: github.event_name != 'pull_request'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: ${{ matrix.target }}
+          platforms: ${{ matrix.platforms }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          annotations: ${{ steps.meta.outputs.annotations }}
+          cache-from: type=gha,scope=${{ matrix.target }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.target }}
+          provenance: mode=max
+          sbom: true
+
+      - name: Say what was published
+        if: github.event_name != 'pull_request'
+        run: |
+          {
+            echo "### ${{ matrix.target }}"
+            echo
+            echo '```'
+            echo "${{ steps.meta.outputs.tags }}"
+            echo '```'
+            echo
+            echo "digest \`${{ steps.push.outputs.digest }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,19 @@
+# An allowlist, not a denylist. This repository has a rule about what must never
+# leave it -- client transcripts, media, datasets, model weights -- and a
+# denylist is one forgotten line away from baking a checkpoint into a public
+# image. Everything is excluded here and only the study is put back.
+*
+
+!pyproject.toml
+!uv.lock
+!README.md
+!LICENSE
+!src
+!benchmarks
+!assets
+!docs
+
+# Nothing below is wanted even inside the directories above.
+**/__pycache__
+**/*.py[cod]
+**/.DS_Store

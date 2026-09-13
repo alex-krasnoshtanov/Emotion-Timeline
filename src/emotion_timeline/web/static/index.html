@@ -688,11 +688,20 @@ async function loadDemo() {
     + (META.valence_available ? "" : " Unavailable here: the checkpoint has not been downloaded.");
   $("valence").disabled = !META.valence_available;
 
-  const missing = [];
-  if (!META.ffmpeg_available) missing.push("ffmpeg is not on PATH, so links and files cannot be read");
-  if (!META.demo_available) missing.push("there is no committed timeline in this checkout");
-  $("unavailable").hidden = !missing.length;
-  $("unavailable").textContent = missing.length ? `Note: ${missing.join("; ")}.` : "";
+  // A study install reads records and serves the example; it cannot transcribe.
+  // Better said here than discovered a minute into a run.
+  if (!META.pipeline_available) {
+    $("run").disabled = true;
+    $("unavailable").hidden = false;
+    $("unavailable").textContent = META.ffmpeg_available
+      ? "This build reads committed records and serves the example. Running a video "
+        + "of your own needs the full image, or the stt and model extras."
+      : "ffmpeg is not on PATH, so this build cannot read a link or a file. It still "
+        + "serves the committed example.";
+  } else if (!META.demo_available) {
+    $("unavailable").hidden = false;
+    $("unavailable").textContent = "There is no committed timeline in this checkout.";
+  }
 
   // A run survives a reload: the id is in the URL and the server still has it.
   const resuming = location.hash.slice(1);

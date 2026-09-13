@@ -558,6 +558,32 @@ own, `--extra web` for the browser front end.
 
 pip works too: `pip install -e ".[dev]"`.
 
+### Or in a container
+
+```bash
+docker run --rm -p 127.0.0.1:8000:8000 ghcr.io/alex-krasnoshtanov/emotion-timeline:study
+docker run --rm ghcr.io/alex-krasnoshtanov/emotion-timeline:study timeline
+```
+
+Two images come out of one Dockerfile, split the same way the extras are.
+`:study` is about 400 MB and runs every command that reads a committed record,
+plus the page serving the committed example. `:latest` adds ffmpeg, Whisper and
+the classifiers, so it runs the whole pipeline on a video of your own:
+
+```bash
+docker compose up          # http://127.0.0.1:8000, models cached in a volume
+```
+
+Both publish to loopback rather than to every interface, because the page hands
+a URL to yt-dlp and a file to ffmpeg.
+
+The project is installed into `/app` in the image and not into site-packages,
+and that is the reason **there is no PyPI package**. Every read-only command
+finds its records relative to its own file, so an installed wheel looks for
+`<venv>/Lib/benchmarks/...` and finds nothing. The container ships the
+repository layout, which is what those commands need; a wheel on its own would
+be a CLI with no data.
+
 `emotion-timeline --help` groups the twenty-one commands by chapter, and every
 command's own `--help` leads with examples and prints the default for every flag.
 Two conventions hold across all of them: a command named for reading a record
@@ -668,13 +694,14 @@ cannot be run, because 24,766 rows is what exists.
   (`speechbrain/...IEMOCAP`, `ehcalabres/...RAVDESS`) is trained on small
   corpora of *acted English*, with no Russian at all and nothing here to score it
   against. It would be a component nobody could check.
-- **No Docker image and no docs site.**
-  [Detection-by-Shadow](https://github.com/alex-krasnoshtanov/Detection-by-Shadow)
-  carries the container;
+- **No PyPI package.** Twenty of the twenty-one commands read records that
+  live in the repository, and they find them relative to their own file, so a
+  wheel on its own is a CLI with no data. The
+  [container](#or-in-a-container) ships the layout those commands need, and
+  `git clone` covers everyone else.
+- **No docs site.**
   [DSL-Learning](https://github.com/alex-krasnoshtanov/DSL-Learning) carries the
-  mkdocs site. This repository is the study, and it installs in a few seconds.
-  There *is* a browser front end now, `emotion-timeline serve`, but it is a local
-  tool behind an optional extra rather than a deployed demo.
+  mkdocs one. This repository is the study, and it installs in a few seconds.
 
 ---
 

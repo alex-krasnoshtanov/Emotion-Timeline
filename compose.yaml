@@ -1,0 +1,35 @@
+# docker compose up            the full pipeline, on http://127.0.0.1:8000
+# docker compose up study      the committed example only, and every read-only
+#                              command, without the model download
+#
+# Both publish to 127.0.0.1 rather than to every interface. The page hands a URL
+# to yt-dlp and a file to ffmpeg, so anyone who can reach the port can make this
+# machine fetch a URL of their choosing.
+
+name: emotion-timeline
+
+services:
+  app:
+    image: ghcr.io/alex-krasnoshtanov/emotion-timeline:latest
+    build:
+      context: .
+      target: app
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      # Whisper and the two classifiers land here on first run, about 3 GB, and
+      # stay for the next one.
+      - timeline-data:/data
+    restart: unless-stopped
+
+  study:
+    image: ghcr.io/alex-krasnoshtanov/emotion-timeline:study
+    build:
+      context: .
+      target: study
+    ports:
+      - "127.0.0.1:8001:8000"
+    profiles: ["study"]
+
+volumes:
+  timeline-data:

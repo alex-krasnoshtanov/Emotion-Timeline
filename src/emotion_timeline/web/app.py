@@ -69,6 +69,27 @@ MEDIA_SUFFIXES = frozenset(
 SAFE_SUFFIX = re.compile(r"^\.[A-Za-z0-9]{1,8}$")
 
 
+def pipeline_available() -> bool:
+    """Whether this install can run a video, or only read committed records.
+
+    The `study` container ships the core and the `web` extra and nothing else,
+    so `serve` there opens the page and draws the committed example but cannot
+    transcribe anything. Saying so on load is better than failing a minute into
+    a run with an ImportError.
+    """
+    from importlib.util import find_spec
+
+    if shutil.which("ffmpeg") is None:
+        return False
+    for module in ("yt_dlp", "faster_whisper", "torch", "transformers"):
+        try:
+            if find_spec(module) is None:
+                return False
+        except (ImportError, ValueError):  # pragma: no cover - a broken install
+            return False
+    return True
+
+
 def validate_url(raw: str) -> str:
     """A URL we are willing to hand to a downloader, or a reason we are not."""
     candidate = raw.strip()
@@ -197,6 +218,7 @@ def build_app(downloads: str | Path = "downloads", store: JobStore | None = None
                 # The warning `serve` prints goes to a terminal the person using
                 # the page may never look at, so it is said here as well.
                 "ffmpeg_available": shutil.which("ffmpeg") is not None,
+                "pipeline_available": pipeline_available(),
                 "valence_note": (
                     "Valence and arousal from a published multilingual model. On "
                     "held-out Russian they made no difference to the emotion label, "

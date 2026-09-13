@@ -416,6 +416,27 @@ def test_meta_says_what_this_checkout_can_actually_do(client: TestClient) -> Non
     assert meta["max_upload_bytes"] == web.MAX_UPLOAD_BYTES
     assert set(meta["media_suffixes"]) == set(web.MEDIA_SUFFIXES)
     assert isinstance(meta["ffmpeg_available"], bool)
+    assert isinstance(meta["pipeline_available"], bool)
+
+
+def test_an_install_that_cannot_transcribe_says_so(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The study image ships no ffmpeg and no models, and the page must know."""
+    # `app` calls shutil.which and imports find_spec when it runs, so patching
+    # the two modules is enough to stand in for a missing ffmpeg or dependency.
+    import importlib.util
+    import shutil
+
+    monkeypatch.setattr(shutil, "which", lambda _: None)
+    assert web.pipeline_available() is False
+
+    monkeypatch.setattr(shutil, "which", lambda _: "/usr/bin/ffmpeg")
+    monkeypatch.setattr(importlib.util, "find_spec", lambda name: object())
+    assert web.pipeline_available() is True
+
+    monkeypatch.setattr(
+        importlib.util, "find_spec", lambda name: None if name == "torch" else object()
+    )
+    assert web.pipeline_available() is False
 
 
 # --- the page, which has no build step to catch any of this -------------------

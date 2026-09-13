@@ -226,6 +226,8 @@ worth trying on anything with a score under the narration, for the reason above.
 ```bash
 uv sync --extra web --extra stt --extra model
 uv run emotion-timeline serve            # http://127.0.0.1:8000
+
+docker compose up                        # or the same thing in a container
 ```
 
 A link or a file goes in the box, the page polls while Whisper and the two
@@ -264,7 +266,18 @@ The scene gap and the voice-activity filter are both on the page, because the
 [VAD finding](#the-voice-activity-filter-drops-narration-over-music) means the
 right setting depends on the recording. If this checkout is missing something,
 say ffmpeg on PATH or the valence checkpoint, the page says so on load instead of
-failing at the end of a run.
+failing at the end of a run. That is also what makes the small container honest:
+`:study` carries no transcriber, so it opens the page, draws the committed
+example, and disables the run button with a line saying why.
+
+**Two images, for the two things people want.** `ghcr.io/...:study` is core plus
+the page, about 400 MB, and runs every command that reads a committed record.
+`ghcr.io/...:latest` adds ffmpeg, Whisper and the classifiers. Both install the
+project into `/app` rather than into site-packages, because the commands find
+their records relative to their own file: the image ships the repository layout,
+which is the thing a wheel cannot. The published images are built by
+[`release.yml`](../.github/workflows/release.yml), which runs `timeline` inside
+each one and checks the numbers before pushing it.
 
 ## What this does not establish
 
