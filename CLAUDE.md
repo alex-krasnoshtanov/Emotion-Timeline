@@ -104,7 +104,8 @@ tests/                the arithmetic, and the mistakes worth pinning
 ## Commands
 
 ```bash
-uv sync --extra dev
+uv sync --extra dev --extra web   # --extra web too: without it the front end's
+                                  # tests skip and the coverage floor fails
 uv run pre-commit install --install-hooks -t pre-commit -t pre-push   # once
 
 uv run pytest --cov          # tests, with the 95% floor applied

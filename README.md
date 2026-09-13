@@ -508,7 +508,7 @@ the arithmetic is not obvious, and `tests/test_wer.py` pins it.
 ```bash
 git clone https://github.com/alex-krasnoshtanov/Emotion-Timeline
 cd Emotion-Timeline
-uv sync --extra dev
+uv sync --extra dev --extra web
 uv run pytest
 ```
 

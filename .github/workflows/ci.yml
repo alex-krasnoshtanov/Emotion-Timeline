@@ -48,7 +48,7 @@ jobs:
           enable-cache: true
           cache-dependency-glob: uv.lock
       - name: Install
-        run: uv sync --extra dev
+        run: uv sync --extra dev --extra web
       - name: Type check
         run: uv run mypy
 
@@ -74,11 +74,13 @@ jobs:
         with:
           enable-cache: true
           cache-dependency-glob: uv.lock
-      # Core plus dev only. The `model` and `stt` extras pull torch and a paid
-      # API client; nothing under tests/ needs either, and installing them would
-      # take the job from under a minute to several.
+      # Core, dev and web. The `web` extra is four pure-Python packages and the
+      # front end's tests are the only ones that would otherwise be skipped
+      # here -- silently, taking the coverage floor down with them. The `model`
+      # and `stt` extras stay out: they pull torch, nothing under tests/ needs
+      # it, and they would take the job from under a minute to several.
       - name: Install
-        run: uv pip install --system -e ".[dev]"
+        run: uv pip install --system -e ".[dev,web]"
       # --cov reads its floor from [tool.coverage.report] in pyproject.toml, so
       # the gate is the same number locally and here. A stage that lands without
       # a test drags the total under it and fails this job.
