@@ -21,7 +21,7 @@ def source(tmp_path: Path, content: bytes = b"weights") -> str:
     return path.as_uri()
 
 
-@pytest.mark.parametrize("version", ["distilbert-v1", "rubert-v1"])
+@pytest.mark.parametrize("version", ["distilbert-v1", "rubert-v1", "va-v1"])
 def test_every_shipped_checkpoint_has_a_digest_recorded(version: str) -> None:
     """Without one, a substituted asset predicts something else and says nothing."""
     spec = weights.spec_for(version)
@@ -31,7 +31,7 @@ def test_every_shipped_checkpoint_has_a_digest_recorded(version: str) -> None:
 
 
 def test_the_registry_lists_what_it_knows() -> None:
-    assert weights.list_versions() == ["distilbert-v1", "rubert-v1"]
+    assert weights.list_versions() == ["distilbert-v1", "rubert-v1", "va-v1"]
 
 
 def test_a_version_nobody_has_says_what_is_available() -> None:

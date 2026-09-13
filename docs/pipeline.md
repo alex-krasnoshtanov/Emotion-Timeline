@@ -9,7 +9,7 @@ without a single label, and the answer is less flattering than the picture.
 
 ```bash
 uv run emotion-timeline timeline --against benchmarks/pipeline/timeline-whisper.json
-uv run emotion-timeline score-timeline   # reruns both models over the transcript
+uv run emotion-timeline score-timeline --valence   # reruns the models over the transcript
 ```
 
 ![47 scenes over 52 minutes; the two models agree on 36% of them](../assets/emotion-timeline.png)
@@ -46,23 +46,26 @@ seconds, and five gives ten, which is a chapter list rather than a timeline. The
 threshold is one flag, it is recorded, and a reader can check it against the
 transcript by eye — three things PySceneDetect was not.
 
-**Intensity is the calibration, for now.** The original ran a second model for
-intensity, and an audit of the source repos corrected what this chapter used to
-say about it: it was not a homemade guess but
-[a published multilingual valence–arousal regressor](https://arxiv.org/abs/2302.14021)
-(Mendes & Martins, ECIR 2023), XLM-RoBERTa-large, trained on 34 psycho-linguistic
-datasets and working on Russian without translation. What was never checked was
-its *output* — no score against any labelled set, and arousal cut into five
-"intensity levels" at 0.2/0.4/0.6/0.8, thresholds nothing justified. On this very
-recording those buckets collapse: the original's own plot puts almost every
-segment between 0.2 and 0.8, so two of the five levels are all but empty.
+**Intensity was the original's second model, and it has now been scored.** That
+model is real — [Mendes & Martins, ECIR 2023](https://arxiv.org/abs/2302.14021),
+multilingual, reads Russian without translation — but its output was never checked
+against anything, and its arousal dimension was cut into five "intensity levels"
+at 0.2/0.4/0.6/0.8 on no evidence. [`valence.md`](valence.md) scores both
+dimensions on held-out Russian and finds the split verdict: **valence separates
+the classes at AUC 0.8223, arousal at 0.5734**, so the original built its scale on
+the weaker of the two. The five levels turn out to be three; the outer two hold
+8.7% of the data.
 
-So the strip under this timeline is a calibrated confidence instead — a number
-fitted on held-out validation rows, measuring *how sure the classifier is* rather
-than how energetic the speech is. Those are different quantities and confidence is
-the weaker stand-in; it is here because it could be checked and the arousal
-dimension had not been. Adding arousal properly is open work, and
-[the README says so](../README.md#scope).
+The strip under this timeline is therefore still **calibrated confidence** — how
+sure the classifier is, which is a different quantity from how energetic the
+speech is, and the one that can be checked. Neither dimension improves the emotion
+label (p = 0.3634), so neither is allowed near the prediction.
+
+**The valence band above it is display-only and off by default.** It earns its
+place by disagreeing with the label where the label says least: 26 of these 47
+scenes are called Neutral, and those 26 span **91% of the whole episode's valence
+range** — 0.154 at the favelas, 0.824 after the border crossing. Turn it on with
+`--valence`, or the checkbox in the browser.
 
 **Translation is a pinned artefact.** `Helsinki-NLP/opus-mt-ru-en`, greedy
 decoding, no beams. The original called a local LLM server with a configurable
@@ -298,5 +301,9 @@ right setting depends on the recording.
   places. The number is a floor on the sensitivity, not a measurement of it.
 - **The scene boundaries are silences, not scenes.** A presenter pausing for
   breath and a hard cut to a different location look identical from a transcript.
+- **The valence band is a reading, not a measurement.** It was scored on
+  translated social-media text, which is the wrong register for this, and it has
+  never been validated on documentary speech. It is drawn because it separates
+  scenes the label cannot, not because anything here says it is right.
 - **The AssemblyAI transcript's 0.81% word error rate** was measured over an
   eighteen-minute window, not all 51. Errors outside it propagate here silently.

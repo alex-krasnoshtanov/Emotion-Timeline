@@ -820,6 +820,7 @@ def cmd_score_timeline(args: argparse.Namespace) -> int:  # pragma: no cover - r
         rubert=args.rubert,
         comparison=args.comparison,
         progress=print,
+        valence=args.valence,
     )
     written = run.write_record(record, args.out)
     print()
@@ -940,6 +941,200 @@ def cmd_serve(args: argparse.Namespace) -> int:  # pragma: no cover - starts a s
     print(f"emotion-timeline on http://{args.host}:{args.port}")
     print("  a link or a file goes in; the committed example needs no GPU")
     web.serve(host=args.host, port=args.port, downloads=args.downloads)
+    return 0
+
+
+def _rescore_valence(args: argparse.Namespace) -> int:  # pragma: no cover - runs three models
+    """Recompute the whole valence record: the model, the stacker, the rules."""
+    import json
+
+    import numpy as np
+    import pandas as pd
+    from sklearn.linear_model import LogisticRegression
+
+    from emotion_timeline.data.labels import EMOTIONS
+    from emotion_timeline.russian import baselines, translate, va
+    from emotion_timeline.training import evaluate, run, splits
+
+    index_of = {name: position for position, name in enumerate(EMOTIONS)}
+    manifest = splits.SplitManifest.load(args.manifest)
+    frame = pd.read_csv(args.dataset)
+    texts = [str(v) for v in frame["text"]]
+    labels = [str(v) for v in frame["label"]]
+    keys = splits.row_keys(texts, labels, [str(v) for v in frame["source"]], seed=manifest.seed)
+    assignment = splits.assign(keys, labels, manifest.fraction)
+
+    blocks = json.loads(Path(args.comparison).read_text(encoding="utf-8"))
+    a_name, b_name = blocks["pair"]
+    native = np.load(args.rubert_predictions)
+
+    parts: dict[str, dict[str, Any]] = {}
+    for split in (splits.VALIDATION, splits.TEST):
+        chosen = [i for i, value in enumerate(assignment) if value == split]
+        rows = [texts[i] for i in chosen]
+        print(f"{split}: {len(rows):,} rows")
+        print(f"  valence and arousal with {args.checkpoint}")
+        valence, arousal = va.predict(rows, args.checkpoint, progress=print)
+        print(f"  translating with {translate.MODEL}, then {args.weights}")
+        english = translate.translate(rows, progress=print)
+        a_raw, _ = baselines.predict(args.weights, english, multi_label=False)
+        parts[split] = {
+            "y": np.array([index_of[labels[i]] for i in chosen]),
+            "labels": [labels[i] for i in chosen],
+            "valence": valence,
+            "arousal": arousal,
+            "A": evaluate.softmax(
+                np.log(np.clip(a_raw, 1e-12, None)),
+                float(blocks["approaches"][a_name]["temperature"]),
+            ),
+            "B": evaluate.softmax(
+                native[f"{split}_logits"], float(blocks["approaches"][b_name]["temperature"])
+            ),
+        }
+
+    def stack(features: list[str]) -> np.ndarray:
+        def build(part: dict[str, Any]) -> Any:
+            return np.hstack(
+                [part[k] if k in ("A", "B") else part[k].reshape(-1, 1) for k in features]
+            )
+
+        model = LogisticRegression(max_iter=3000, random_state=manifest.seed)
+        model.fit(build(parts[splits.VALIDATION]), parts[splits.VALIDATION]["y"])
+        chosen: np.ndarray = model.predict(build(parts[splits.TEST]))
+        return chosen
+
+    test = parts[splits.TEST]
+    y = test["y"]
+    argmax = test["B"].argmax(axis=1)
+    without, with_va = stack(["A", "B"]), stack(["A", "B", "valence", "arousal"])
+
+    contribution = {
+        "_comment": (
+            "A stacker over both classifiers, fitted on validation and scored on "
+            "test, with and without the two dimensions as extra features."
+        ),
+        "without": round(float((without == y).mean()), 4),
+        "with": round(float((with_va == y).mean()), 4),
+        **va.mcnemar(y, without, with_va),
+        "verdict": "",
+    }
+    contribution["verdict"] = (
+        "no measurable gain, so this is display-only and off by default"
+        if not contribution["significant"]
+        else "a measurable gain, which would change how this is used"
+    )
+
+    # Everything that was tried and did not work. The chapter quotes these, so
+    # they belong in the record rather than in a notebook nobody kept.
+    neutral, joy = index_of["Neutral"], index_of["Joy"]
+    validation = parts[splits.VALIDATION]
+
+    def best_threshold(rule: str) -> float:
+        a_v, b_v = validation["A"].argmax(axis=1), validation["B"].argmax(axis=1)
+        disagree = a_v != b_v
+        best = (0.0, 0.5)
+        for threshold in np.arange(0.20, 0.85, 0.01):
+            picked = _apply_rule(
+                rule, validation, a_v, b_v, disagree, float(threshold), neutral, joy
+            )
+            score = float((picked == validation["y"]).mean())
+            if score > best[0]:
+                best = (score, float(threshold))
+        return best[1]
+
+    a_t, b_t = test["A"].argmax(axis=1), test["B"].argmax(axis=1)
+    disagree_t = a_t != b_t
+    alternatives: dict[str, Any] = {}
+    for rule, label in (
+        ("arousal-neutral", "low arousal means Neutral where they disagree"),
+        ("valence-joy", "valence picks the positive candidate"),
+    ):
+        threshold = best_threshold(rule)
+        picked = _apply_rule(rule, test, a_t, b_t, disagree_t, threshold, neutral, joy)
+        measured = va.mcnemar(y, b_t, picked)
+        alternatives[rule] = {
+            "what": label,
+            "threshold_fitted_on_validation": round(threshold, 2),
+            "accuracy": round(float((picked == y).mean()), 4),
+            "baseline": round(float((b_t == y).mean()), 4),
+            **measured,
+            "note": (
+                f"{measured['gained']} right, {measured['lost']} wrong; "
+                f"{float((picked == y).mean()):.4f} against {float((b_t == y).mean()):.4f}"
+            ),
+        }
+
+    stacker = va.mcnemar(y, argmax, with_va)
+    alternatives["learned-stacker"] = {
+        "what": "a stacker over both classifiers, against the native model's argmax",
+        "accuracy": round(float((with_va == y).mean()), 4),
+        "baseline": round(float((argmax == y).mean()), 4),
+        **stacker,
+        "balanced_accuracy": va.balanced_accuracy(y, with_va),
+        "baseline_balanced_accuracy": va.balanced_accuracy(y, argmax),
+        "neutral_share": va.share_predicted(with_va, "Neutral"),
+        "baseline_neutral_share": va.share_predicted(argmax, "Neutral"),
+        "gold_neutral_share": round(float((y == neutral).mean()), 4),
+        "note": (
+            f"accuracy {float((with_va == y).mean()):.4f} against "
+            f"{float((argmax == y).mean()):.4f}, p={stacker['p_value']:.4f} -- but balanced "
+            f"accuracy {va.balanced_accuracy(y, with_va):.4f} against "
+            f"{va.balanced_accuracy(y, argmax):.4f}, so it is the class prior, not skill"
+        ),
+    }
+
+    record = va.build_record(
+        test["valence"], test["arousal"], test["labels"], contribution, alternatives=alternatives
+    )
+    written = run.write_record(record, args.record)
+    print()
+    for line in va.describe(va.ValenceReport.load(written)):
+        print(line)
+    print()
+    print(f"wrote {written}")
+    return 0
+
+
+def _apply_rule(  # pragma: no cover - only reached by --rescore
+    rule: str,
+    part: dict[str, Any],
+    a_pick: Any,
+    b_pick: Any,
+    disagree: Any,
+    threshold: float,
+    neutral: int,
+    joy: int,
+) -> Any:
+    """One tie-break rule, applied where the two classifiers disagree."""
+    import numpy as np
+
+    if rule == "arousal-neutral":
+        touched = disagree & ((a_pick == neutral) | (b_pick == neutral))
+        other = np.where(a_pick == neutral, b_pick, a_pick)
+        return np.where(
+            touched & (part["arousal"] < threshold), neutral, np.where(touched, other, b_pick)
+        )
+    touched = disagree & ((a_pick == joy) ^ (b_pick == joy))
+    other = np.where(a_pick == joy, b_pick, a_pick)
+    return np.where(touched, np.where(part["valence"] >= threshold, joy, other), b_pick)
+
+
+def cmd_valence(args: argparse.Namespace) -> int:
+    """What valence and arousal separate, and what they add to the label."""
+    from emotion_timeline.russian import va
+
+    if args.rescore:  # pragma: no cover - runs three models
+        return _rescore_valence(args)
+
+    report = va.ValenceReport.load(args.record)
+    problems = va.check_consistency(report)
+    for problem in problems:
+        print(f"inconsistent record: {problem}", file=sys.stderr)
+    if problems:
+        return 1
+
+    for line in va.describe(report):
+        print(line)
     return 0
 
 
@@ -1329,6 +1524,17 @@ def build_parser() -> argparse.ArgumentParser:
     score_timeline_parser.add_argument(
         "--comparison", default=str(BENCHMARKS / "russian" / "comparison.json")
     )
+    score_timeline_parser.add_argument(
+        "--valence",
+        nargs="?",
+        const="models/va-v1",
+        default=None,
+        metavar="CHECKPOINT",
+        help=(
+            "also read valence and arousal (display only; measured to add nothing "
+            "to the label, see `emotion-timeline valence`). Off unless given."
+        ),
+    )
     score_timeline_parser.add_argument("--out", default=str(TIMELINE))
     score_timeline_parser.set_defaults(func=cmd_score_timeline)
 
@@ -1384,6 +1590,36 @@ def build_parser() -> argparse.ArgumentParser:
     serve_parser.add_argument("--port", type=int, default=8000)
     serve_parser.add_argument("--downloads", default="downloads")
     serve_parser.set_defaults(func=cmd_serve)
+
+    valence_parser = sub.add_parser(
+        "valence",
+        help="what the valence-arousal model separates, and what it does not add",
+        description=(
+            "The second model the original coursework ran, scored for the first "
+            "time against this project's own labels. Valence separates Joy from "
+            "the negative classes; arousal barely separates anything; neither "
+            "improves the emotion label, which is why both are display-only."
+        ),
+    )
+    valence_parser.add_argument(
+        "--record", default=str(BENCHMARKS / "russian" / "valence-arousal.json")
+    )
+    valence_parser.add_argument(
+        "--rescore",
+        action="store_true",
+        help="recompute the record from the models (needs --extra model and the checkpoint)",
+    )
+    valence_parser.add_argument("--dataset", default="data/russian.csv")
+    valence_parser.add_argument(
+        "--manifest", default=str(BENCHMARKS / "russian" / "split-manifest.json")
+    )
+    valence_parser.add_argument(
+        "--comparison", default=str(BENCHMARKS / "russian" / "comparison.json")
+    )
+    valence_parser.add_argument("--checkpoint", default="models/va-v1")
+    valence_parser.add_argument("--weights", default="models/distilbert-v1")
+    valence_parser.add_argument("--rubert-predictions", default="models/predictions-rubert.npz")
+    valence_parser.set_defaults(func=cmd_valence)
 
     errors_parser = sub.add_parser(
         "errors",

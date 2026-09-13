@@ -1,6 +1,6 @@
 """Downloading a trained checkpoint, and refusing one that is not the right file.
 
-The weights are 268 MB and the repository is meant to stay clonable in seconds, so
+The largest checkpoint here is 1.1 GB and the repository is meant to stay clonable in seconds, so
 they ship as a GitHub release asset rather than in git. That only works if a
 reader can tell they got the file this study measured, which is what the digest
 is for: a download whose SHA-256 differs is deleted rather than cached, because a
@@ -55,6 +55,15 @@ REGISTRY: dict[str, WeightSpec | str] = {
         url=f"{RELEASE}/weights-ru-v1/emotion-timeline-rubert-v1.safetensors",
         sha256="c94a09587021b58afcb863807c3cf7f2bfd1dab91f8e2f3020ec040b76a659e2",
     ),
+    # Last, and the only one not trained here: a mirror of the published
+    # valence-arousal regressor, so it can be pinned by digest and loaded
+    # without unpickling a .bin out of a Google Drive folder. Mendes & Martins,
+    # ECIR 2023, MIT. Display-only -- see russian/va.py for what it is measured
+    # to do and not do.
+    "va-v1": WeightSpec(
+        url=f"{RELEASE}/weights-va-v1/emotion-timeline-va-v1.safetensors",
+        sha256="f75773cb738a8f279832b5dd8b24209c5b1c3c71d4eb09d97b2981ecc9041332",
+    ),
 }
 
 _DEFAULT_CACHE = Path.home() / ".cache" / "emotion-timeline" / "models"
@@ -77,6 +86,41 @@ def spec_for(version: str) -> WeightSpec:
     """``REGISTRY[version]`` as a spec, wrapping a bare URL."""
     entry = REGISTRY[version]
     return entry if isinstance(entry, WeightSpec) else WeightSpec(url=entry)
+
+
+#: The files a checkpoint needs beside its weights before `from_pretrained` will
+#: read it. Published on the same release, named `<version>-<file>`.
+COMPANIONS: dict[str, tuple[str, ...]] = {
+    "va-v1": (
+        "config.json",
+        "sentencepiece.bpe.model",
+        "special_tokens_map.json",
+        "tokenizer_config.json",
+    ),
+}
+
+
+def get_model_dir(version: str, into: str | Path | None = None) -> Path:
+    """A directory `from_pretrained` can load, assembled from the release.
+
+    :func:`get_weights` returns one file, which is all the digest check needs and
+    not enough to load a model: transformers wants a directory with a config and
+    a tokenizer beside the weights. This fetches those too and lays them out.
+    """
+    spec = spec_for(version)
+    target = Path(into) if into else get_cache_dir() / version
+    target.mkdir(parents=True, exist_ok=True)
+
+    weights_file = target / "model.safetensors"
+    if not weights_file.exists():
+        shutil.copyfile(get_weights(version), weights_file)
+
+    base = spec.url.rsplit("/", 1)[0]
+    for name in COMPANIONS.get(version, ()):
+        companion = target / name
+        if not companion.exists():
+            download(f"{base}/{version}-{name}", companion)
+    return target
 
 
 def get_weights(version: str, cache_dir: str | Path | None = None) -> Path:

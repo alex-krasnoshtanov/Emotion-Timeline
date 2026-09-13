@@ -59,8 +59,15 @@ def score(  # pragma: no cover - loads two classifiers and a translator
     rubert: str = DEFAULT_RUBERT,
     comparison: str | Path = DEFAULT_COMPARISON,
     progress: object = None,
+    valence: str | Path | None = None,
 ) -> dict[str, Any]:
-    """Score every chunk with both models and build the timeline record."""
+    """Score every chunk with both models and build the timeline record.
+
+    ``valence`` is a path to the valence-arousal checkpoint, or None. It is off
+    by default and that is a measured decision rather than caution: the two
+    dimensions add nothing to the label (p = 0.3634, see `russian/va.py`), so they
+    are carried for a reader to look at and for nothing else.
+    """
     import numpy as np
 
     from emotion_timeline.russian import baselines, translate
@@ -93,6 +100,29 @@ def score(  # pragma: no cover - loads two classifiers and a translator
         )
         return scaled
 
+    extra: dict[str, Any] = {}
+    if valence is not None:
+        from emotion_timeline.russian import va
+
+        say(f"reading valence and arousal with {va.MODEL}")
+        values, energy = va.predict(texts, valence, progress=progress)
+        report = va.ValenceReport.load()
+        extra = {
+            "valence": values,
+            "arousal": energy,
+            "va_model": {
+                "name": va.MODEL,
+                "citation": va.CITATION,
+                "valence_auc": report.auc_of("valence"),
+                "arousal_auc": report.auc_of("arousal"),
+                "improves_the_label": report.helps(),
+                "caveat": (
+                    "display only: measured on held-out Russian to add nothing to "
+                    "the emotion label, and never validated on documentary speech"
+                ),
+            },
+        }
+
     say("calibrating and building the record")
     return pipeline.build_record(
         scenes,
@@ -120,4 +150,5 @@ def score(  # pragma: no cover - loads two classifiers and a translator
             "measured_on": "the held-out ru-izard split, which is social-media register",
             "caveat": AGREEMENT_CAVEAT,
         },
+        **extra,
     )

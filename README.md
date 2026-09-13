@@ -380,6 +380,41 @@ Full chapter: [`docs/russian.md`](docs/russian.md).
 
 ---
 
+## Result: valence and arousal, measured before being shown
+
+The original ran a second model for "intensity" and never scored it. It is a real
+one — [Mendes & Martins, ECIR 2023](https://arxiv.org/abs/2302.14021), 100
+languages, reads Russian without translation — so scoring it needed no new data,
+just the labels this project already has.
+
+```bash
+uv run emotion-timeline valence
+```
+
+| Dimension | Separates | AUC |
+| --- | --- | ---: |
+| **Valence** | Joy over Anger/Disgust/Fear/Sadness | **0.8223** |
+| **Arousal** | Anger/Fear/Surprise over Sadness/Neutral | 0.5734 |
+
+**Valence works; arousal barely does** — and arousal is the one the original used.
+Its five intensity levels turn out to be three: the outer two hold 8.7% of the
+data between them.
+
+**Neither improves the emotion label.** Stacked on both classifiers and fitted on
+validation, the two dimensions move the test score by ten rows in 3,715 —
+54 right, 44 wrong, p = 0.3634. Two tie-break rules built on the idea come out
+measurably *worse* than doing nothing.
+
+**So it is display-only, and off by default.** What earns it a place at all is
+where it disagrees with the label: on the committed recording the 26 scenes called
+*Neutral* span **91% of the episode's entire valence range**, from the favelas at
+0.154 to the border crossing at 0.824. The label says nothing is happening; the
+band says otherwise, and it is drawn under the timeline for exactly that reason.
+
+Full chapter: [`docs/valence.md`](docs/valence.md).
+
+---
+
 ## Result: the pipeline, on a real recording
 
 Three columns — `start_s`, `end_s`, text — are the whole interface. Above them,
@@ -583,7 +618,7 @@ tests/                   the arithmetic, and the mistakes worth pinning
 
 ## Scope
 
-Eight stages are in. Each one commits the inputs it derives from, recomputes its
+Nine stages are in. Each one commits the inputs it derives from, recomputes its
 numbers from a command, and ends its chapter by saying what it does not establish.
 
 | Stage | Command | Chapter |
@@ -595,17 +630,11 @@ numbers from a command, and ends its chapter by saying what it does not establis
 | Where it fails | `errors` | [error-analysis.md](docs/error-analysis.md) |
 | A model that exists | `split`, `fine-tune`, `summarise`, `training` | [fine-tune.md](docs/fine-tune.md) |
 | Russian, and what translation costs | `russian`, `compare-russian`, `translation-cost` | [russian.md](docs/russian.md) |
+| Valence and arousal, scored | `valence` | [valence.md](docs/valence.md) |
 | The timeline, on a real recording | `timeline`, `score-timeline`, `serve` | [pipeline.md](docs/pipeline.md) |
 
-**Still open.** A measured arousal dimension. The original ran a published
-multilingual valence–arousal model
-([Mendes & Martins, ECIR 2023](https://arxiv.org/abs/2302.14021)) and never scored
-it; this rebuild replaced it with calibrated confidence, which is checkable but
-answers a different question. Arousal *can* be scored — against EmoBank, and
-against this project's own labels, where it should separate Anger/Fear/Surprise
-from Sadness/Neutral — so it belongs in scope rather than in the cut list. Then:
-the nine families rerun on one feature pipeline and one held-out split, which is
-the only thing that would repair the ranking withdrawn above. And
+**Still open.** The nine families rerun on one feature pipeline and one held-out
+split, which is the only thing that would repair the ranking withdrawn above. And
 a Russian emotion corpus that is not translated social-media text — the one
 experiment every number in the Russian chapter is waiting on, and the one that
 cannot be run, because 24,766 rows is what exists.
@@ -647,6 +676,7 @@ first. The original group repository was a five-person effort:
 | What | Originally by |
 | --- | --- |
 | Transcription pipeline, scene alignment, the end-to-end system | Oleksii Krasnoshtanov |
+| The valence–arousal checkpoint (mirrored, not trained here) | [Mendes & Martins](https://arxiv.org/abs/2302.14021), MIT |
 | Dataset construction, error analysis, the speech-to-text comparison | Oleksii Krasnoshtanov |
 | Nine-family model comparison and its iteration log | Danil Sysenko |
 | Explainability analysis — attribution and masking | Filipp Lotsmanov |

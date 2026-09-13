@@ -57,7 +57,7 @@ import hashlib
 import itertools
 import json
 import re
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -99,6 +99,21 @@ CSV_COLUMNS = (
     "segments",
     "text",
 )
+
+#: Written only when the run asked for them. They are display-only -- measured
+#: not to improve the label, see `russian/va.py` -- so a timeline without them is
+#: the normal case and the columns simply are not there.
+VA_COLUMNS = ("valence", "arousal")
+
+
+def carries_dimensions(scenes: Sequence[Mapping[str, Any]]) -> bool:
+    """Whether *every* scene carries valence and arousal.
+
+    One predicate, used by the consistency check, the CSV writer and the figure.
+    They each had their own, and a record where only some scenes carried the
+    columns passed the check, drew no band, and then crashed the writer.
+    """
+    return bool(scenes) and all(all(name in scene for name in VA_COLUMNS) for scene in scenes)
 
 
 @dataclass(frozen=True, slots=True)
@@ -312,6 +327,9 @@ def build_record(
     primary_model: dict[str, Any],
     second_model: dict[str, Any],
     agreement: dict[str, Any] | None = None,
+    valence: Sequence[float] | None = None,
+    arousal: Sequence[float] | None = None,
+    va_model: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """The committed record: scene boundaries, both answers, and where they split.
 
@@ -324,6 +342,16 @@ def build_record(
     primary_labels, primary_confidence = _decide(aggregate(pieces, primary, len(scenes)))
     second_labels, second_confidence = _decide(aggregate(pieces, second, len(scenes)))
     agreed = [a == b for a, b in zip(primary_labels, second_labels, strict=True)]
+
+    # Averaged over a scene the same way the probabilities are, so a long chunk
+    # counts for more than a three-word one.
+    dimensions: dict[str, list[float]] = {}
+    for name, values in (("valence", valence), ("arousal", arousal)):
+        if values is not None:
+            column = np.asarray(values, dtype=np.float64).reshape(-1, 1)
+            dimensions[name] = [
+                round(float(row[0]), 4) for row in aggregate(pieces, column, len(scenes))
+            ]
 
     return {
         "_comment": [
@@ -345,6 +373,7 @@ def build_record(
         "duration_s": round(scenes[-1].end_s - scenes[0].start_s, 3) if scenes else 0.0,
         "primary": dict(primary_model),
         "second_opinion": dict(second_model),
+        **({"valence_arousal": dict(va_model)} if va_model else {}),
         "agreement": {
             "scenes": sum(agreed),
             "share": round(sum(agreed) / len(agreed), 4) if agreed else 0.0,
@@ -361,6 +390,7 @@ def build_record(
                 "second_opinion": second_labels[position],
                 "second_confidence": second_confidence[position],
                 "agreed": agreed[position],
+                **{name: values[position] for name, values in dimensions.items()},
             }
             for position, scene in enumerate(scenes)
         ],
@@ -493,6 +523,26 @@ def check_consistency(report: Timeline, segments: Sequence[Segment] | None = Non
                 problems.append(f"{name}: {key} {value} is not a top-class probability")
         if bool(scene["agreed"]) != (scene["emotion"] == scene["second_opinion"]):
             problems.append(f"{name}: the agreed flag contradicts the two predictions")
+        for key in VA_COLUMNS:
+            if key in scene and not 0.0 <= float(scene[key]) <= 1.0:
+                problems.append(f"{name}: {key} {scene[key]} is not a sigmoid output")
+
+    # All of the scenes or none of them. A record where only some carry the
+    # dimensions passes every per-scene check and then crashes the CSV writer,
+    # which decides from the first row alone.
+    carrying = [
+        index for index, scene in enumerate(scenes) if any(name in scene for name in VA_COLUMNS)
+    ]
+    if carrying and not carries_dimensions(scenes):
+        problems.append(
+            f"{len(carrying)} of {len(scenes)} scenes carry valence and arousal; "
+            "it has to be all of them or none"
+        )
+    if carries_dimensions(scenes) != ("valence_arousal" in report.raw):
+        problems.append(
+            "the valence_arousal header and the per-scene columns disagree about "
+            "whether this run read the dimensions"
+        )
 
     agreed = sum(1 for scene in scenes if scene["agreed"])
     if agreed != int(report.agreement["scenes"]):
@@ -536,13 +586,16 @@ def write_csv(rows: Sequence[dict[str, Any]], path: str | Path) -> Path:
     """``timeline.csv``: both predictions, both calibrated confidences, both flags."""
     target = Path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
+    columns = list(CSV_COLUMNS)
+    if carries_dimensions(rows):
+        columns += list(VA_COLUMNS)
     with target.open("w", encoding="utf-8", newline="") as handle:
         # The repository is LF throughout; csv defaults to CRLF and the
         # pre-commit hook would rewrite the file behind the test that compares it.
-        writer = csv.DictWriter(handle, fieldnames=list(CSV_COLUMNS), lineterminator="\n")
+        writer = csv.DictWriter(handle, fieldnames=columns, lineterminator="\n")
         writer.writeheader()
         for row in rows:
-            writer.writerow({key: row[key] for key in CSV_COLUMNS})
+            writer.writerow({key: row[key] for key in columns})
     return target
 
 

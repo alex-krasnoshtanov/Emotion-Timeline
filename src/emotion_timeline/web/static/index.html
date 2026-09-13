@@ -112,7 +112,9 @@
         <input type="number" id="gap" value="1" min="0" max="60" step="0.5">
       </div>
       <label class="check"><input type="checkbox" id="vad" checked> Voice-activity filter</label>
+      <label class="check"><input type="checkbox" id="valence"> Valence &amp; arousal</label>
     </div>
+    <p class="note" id="valence-note" style="margin:8px 0 0"></p>
     <p class="note" style="margin:8px 0 0">
       The filter stops Whisper hallucinating over silence, and on a documentary with
       music under the narration it drops speech. Turn it off if the transcript has holes.
@@ -136,6 +138,7 @@
     <div class="scroll"><svg id="chart" width="1040" height="300" role="img"
       aria-label="Emotion against wall-clock time"></svg></div>
     <p class="caveat" id="caveat"></p>
+    <p class="caveat" id="va-caveat" hidden></p>
 
     <h2>Scene by scene</h2>
     <div class="scroll"><table>
@@ -182,7 +185,8 @@ function renderChart(rows) {
   const emotions = META.emotions;
   const padL = 78, padR = 14, padT = 12, rowH = 26, stripH = 54;
   const width = svg.viewBox.baseVal?.width || 1040;
-  const height = padT + emotions.length * rowH + stripH + 34;
+  const extra = rows.every((r) => typeof r.valence === "number") ? 26 : 0;
+  const height = padT + emotions.length * rowH + extra + stripH + 34;
   svg.setAttribute("height", height);
   svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
 
@@ -223,7 +227,43 @@ function renderChart(rows) {
     svg.appendChild(bar);
   });
 
-  const base = padT + emotions.length * rowH + stripH;
+  const hasValence = rows.every((r) => typeof r.valence === "number");
+  const moodH = hasValence ? 26 : 0;
+  if (hasValence) {
+    const top = padT + emotions.length * rowH + 6;
+    // Midpoint pinned at 0.5, not at this recording's own middle, so two
+    // timelines are comparable.
+    const shade = (v) => {
+      const t = Math.max(0, Math.min(1, v));
+      const [r1, g1, b1] = t < 0.5 ? [171, 47, 39] : [232, 228, 220];
+      const [r2, g2, b2] = t < 0.5 ? [232, 228, 220] : [42, 106, 70];
+      const k = t < 0.5 ? t * 2 : (t - 0.5) * 2;
+      return `rgb(${Math.round(r1 + (r2 - r1) * k)},${Math.round(g1 + (g2 - g1) * k)},${Math.round(b1 + (b2 - b1) * k)})`;
+    };
+    rows.forEach((row) => {
+      const bar = document.createElementNS(SVG, "rect");
+      bar.setAttribute("x", x(row.start_s));
+      bar.setAttribute("y", top);
+      bar.setAttribute("width", Math.max(x(row.end_s) - x(row.start_s), 2));
+      bar.setAttribute("height", moodH - 8);
+      bar.setAttribute("fill", shade(row.valence));
+      const title = document.createElementNS(SVG, "title");
+      title.textContent = `${clock(row.start_s)} valence ${row.valence.toFixed(3)}, arousal ${row.arousal.toFixed(3)}`;
+      bar.appendChild(title);
+      svg.appendChild(bar);
+    });
+    const label = document.createElementNS(SVG, "text");
+    label.setAttribute("x", padL - 10);
+    label.setAttribute("y", top + (moodH - 8) / 2 + 4);
+    label.setAttribute("text-anchor", "end");
+    label.setAttribute("font-size", "11");
+    label.setAttribute("fill", "currentColor");
+    label.setAttribute("opacity", "0.65");
+    label.textContent = "valence";
+    svg.appendChild(label);
+  }
+
+  const base = padT + emotions.length * rowH + moodH + stripH;
   rows.forEach((row) => {
     const h = Math.max(row.confidence * (stripH - 12), 1);
     const bar = document.createElementNS(SVG, "rect");
@@ -261,8 +301,18 @@ function renderResult(payload) {
     stat(rows.length, "scenes")
     + stat(clock(header.duration_s), "length")
     + stat(`${((agreed / rows.length) * 100).toFixed(0)}%`, "the two models agree")
-    + stat(confs[Math.floor(confs.length / 2)].toFixed(3), "median confidence");
+    + stat(confs[Math.floor(confs.length / 2)].toFixed(3), "median confidence")
+    + (rows.every((r) => typeof r.valence === "number")
+        ? stat((rows.reduce((s, r) => s + r.valence, 0) / rows.length).toFixed(3), "mean valence")
+        : "");
   $("caveat").textContent = header.agreement?.caveat || META.caveat;
+  const va = header.valence_arousal;
+  $("va-caveat").hidden = !va;
+  if (va) {
+    $("va-caveat").textContent =
+      `Valence and arousal: ${va.citation}. ${va.caveat} `
+      + `Separation on held-out Russian \u2014 valence AUC ${va.valence_auc}, arousal AUC ${va.arousal_auc}.`;
+  }
   renderChart(rows);
   $("rows").innerHTML = rows.map((r) => `
     <tr>
@@ -299,6 +349,7 @@ $("run").onclick = async () => {
   }
   form.append("gap", $("gap").value);
   form.append("vad", $("vad").checked ? "true" : "false");
+  form.append("valence", $("valence").checked ? "true" : "false");
 
   $("run").disabled = true;
   $("results").classList.remove("on");
@@ -327,6 +378,9 @@ $("demo").onclick = async () => {
   META = await (await fetch("/api/meta")).json();
   $("gap").value = META.default_gap;
   if (!META.demo_available) $("demo").disabled = true;
+  $("valence-note").textContent = META.valence_note
+    + (META.valence_available ? "" : " \u2014 unavailable: the checkpoint is not downloaded.");
+  $("valence").disabled = !META.valence_available;
 })();
 </script>
 </body>

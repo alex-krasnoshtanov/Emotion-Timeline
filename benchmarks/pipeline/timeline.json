@@ -28,6 +28,14 @@
     "temperature": 2.5908,
     "held_out_accuracy": 0.3728
   },
+  "valence_arousal": {
+    "name": "va-v1",
+    "citation": "Mendes & Martins, Quantifying Valence and Arousal in Text with Multilingual Pre-trained Transformers, ECIR 2023 (arXiv:2302.14021)",
+    "valence_auc": 0.8223,
+    "arousal_auc": 0.5734,
+    "improves_the_label": false,
+    "caveat": "display only: measured on held-out Russian to add nothing to the emotion label, and never validated on documentary speech"
+  },
   "agreement": {
     "scenes": 17,
     "share": 0.3617,
@@ -45,7 +53,9 @@
       "confidence": 0.7182,
       "second_opinion": "Disgust",
       "second_confidence": 0.2562,
-      "agreed": false
+      "agreed": false,
+      "valence": 0.4716,
+      "arousal": 0.2703
     },
     {
       "scene": 1,
@@ -56,7 +66,9 @@
       "confidence": 0.4765,
       "second_opinion": "Joy",
       "second_confidence": 0.3247,
-      "agreed": false
+      "agreed": false,
+      "valence": 0.61,
+      "arousal": 0.4282
     },
     {
       "scene": 2,
@@ -67,7 +79,9 @@
       "confidence": 0.5033,
       "second_opinion": "Neutral",
       "second_confidence": 0.2836,
-      "agreed": false
+      "agreed": false,
+      "valence": 0.2518,
+      "arousal": 0.5566
     },
     {
       "scene": 3,
@@ -78,7 +92,9 @@
       "confidence": 0.2536,
       "second_opinion": "Disgust",
       "second_confidence": 0.3417,
-      "agreed": false
+      "agreed": false,
+      "valence": 0.1544,
+      "arousal": 0.7354
     },
     {
       "scene": 4,
@@ -89,7 +105,9 @@
       "confidence": 0.321,
       "second_opinion": "Disgust",
       "second_confidence": 0.4387,
-      "agreed": false
+      "agreed": false,
+      "valence": 0.112,
+      "arousal": 0.7466
     },
     {
       "scene": 5,
@@ -100,7 +118,9 @@
       "confidence": 0.2297,
       "second_opinion": "Disgust",
       "second_confidence": 0.5025,
-      "agreed": true
+      "agreed": true,
+      "valence": 0.2071,
+      "arousal": 0.7015
     },
     {
       "scene": 6,
@@ -111,7 +131,9 @@
       "confidence": 0.4965,
       "second_opinion": "Disgust",
       "second_confidence": 0.4212,
-      "agreed": false
+      "agreed": false,
+      "valence": 0.1308,
+      "arousal": 0.7486
     },
     {
       "scene": 7,
@@ -122,7 +144,9 @@
       "confidence": 0.2665,
       "second_opinion": "Disgust",
       "second_confidence": 0.281,
-      "agreed": true
+      "agreed": true,
+      "valence": 0.1563,
+      "arousal": 0.5552
     },
     {
       "scene": 8,
@@ -133,7 +157,9 @@
       "confidence": 0.3862,
       "second_opinion": "Disgust",
       "second_confidence": 0.4441,
-      "agreed": false
+      "agreed": false,
+      "valence": 0.2031,
+      "arousal": 0.6557
     },
     {
       "scene": 9,
@@ -144,7 +170,9 @@
       "confidence": 0.4907,
       "second_opinion": "Neutral",
       "second_confidence": 0.4092,
-      "agreed": true
+      "agreed": true,
+      "valence": 0.3901,
+      "arousal": 0.575
     },
     {
       "scene": 10,
@@ -155,7 +183,9 @@
       "confidence": 0.3443,
       "second_opinion": "Disgust",
       "second_confidence": 0.2409,
-      "agreed": false
+      "agreed": false,
+      "valence": 0.4146,
+      "arousal": 0.5488
     },
     {
       "scene": 11,
@@ -166,7 +196,9 @@
       "confidence": 0.4201,
       "second_opinion": "Neutral",
       "second_confidence": 0.582,
-      "agreed": false
+      "agreed": false,
+      "valence": 0.2215,
+      "arousal": 0.7986
     },
     {
       "scene": 12,
@@ -177,7 +209,9 @@
       "confidence": 0.3334,
       "second_opinion": "Disgust",
       "second_confidence": 0.2173,
-      "agreed": false
+      "agreed": false,
+      "valence": 0.2745,
+      "arousal": 0.6973
     },
     {
       "scene": 13,
@@ -188,7 +222,9 @@
       "confidence": 0.237,
       "second_opinion": "Disgust",
       "second_confidence": 0.3647,
-      "agreed": true
+      "agreed": true,
+      "valence": 0.1833,
+      "arousal": 0.7716
     },
     {
       "scene": 14,
@@ -199,7 +235,9 @@
       "confidence": 0.322,
       "second_opinion": "Neutral",
       "second_confidence": 0.2243,
-      "agreed": true
+      "agreed": true,
+      "valence": 0.3372,
+      "arousal": 0.6329
     },
     {
       "scene": 15,
@@ -210,7 +248,9 @@
       "confidence": 0.3817,
       "second_opinion": "Disgust",
       "second_confidence": 0.3986,
-      "agreed": true
+      "agreed": true,
+      "valence": 0.3285,
+      "arousal": 0.5633
     },
     {
       "scene": 16,
@@ -221,7 +261,9 @@
       "confidence": 0.5251,
       "second_opinion": "Neutral",
       "second_confidence": 0.3088,
-      "agreed": true
+      "agreed": true,
+      "valence": 0.4839,
+      "arousal": 0.4694
     },
     {
       "scene": 17,
@@ -232,7 +274,9 @@
       "confidence": 0.3533,
       "second_opinion": "Disgust",
       "second_confidence": 0.5699,
-      "agreed": false
+      "agreed": false,
+      "valence": 0.3736,
+      "arousal": 0.507
     },
     {
       "scene": 18,
@@ -243,7 +287,9 @@
       "confidence": 0.21,
       "second_opinion": "Disgust",
       "second_confidence": 0.3214,
-      "agreed": false
+      "agreed": false,
+      "valence": 0.2279,
+      "arousal": 0.701
     },
     {
       "scene": 19,
@@ -254,7 +300,9 @@
       "confidence": 0.4982,
       "second_opinion": "Disgust",
       "second_confidence": 0.2831,
-      "agreed": false
+      "agreed": false,
+      "valence": 0.2531,
+      "arousal": 0.6609
     },
     {
       "scene": 20,
@@ -265,7 +313,9 @@
       "confidence": 0.3503,
       "second_opinion": "Disgust",
       "second_confidence": 0.4161,
-      "agreed": false
+      "agreed": false,
+      "valence": 0.2435,
+      "arousal": 0.6446
     },
     {
       "scene": 21,
@@ -276,7 +326,9 @@
       "confidence": 0.5197,
       "second_opinion": "Disgust",
       "second_confidence": 0.443,
-      "agreed": false
+      "agreed": false,
+      "valence": 0.3315,
+      "arousal": 0.4764
     },
     {
       "scene": 22,
@@ -287,7 +339,9 @@
       "confidence": 0.4289,
       "second_opinion": "Disgust",
       "second_confidence": 0.2327,
-      "agreed": false
+      "agreed": false,
+      "valence": 0.4729,
+      "arousal": 0.5034
     },
     {
       "scene": 23,
@@ -298,7 +352,9 @@
       "confidence": 0.2455,
       "second_opinion": "Disgust",
       "second_confidence": 0.3275,
-      "agreed": false
+      "agreed": false,
+      "valence": 0.2939,
+      "arousal": 0.5785
     },
     {
       "scene": 24,
@@ -309,7 +365,9 @@
       "confidence": 0.4137,
       "second_opinion": "Fear",
       "second_confidence": 0.2561,
-      "agreed": false
+      "agreed": false,
+      "valence": 0.497,
+      "arousal": 0.4055
     },
     {
       "scene": 25,
@@ -320,7 +378,9 @@
       "confidence": 0.2566,
       "second_opinion": "Joy",
       "second_confidence": 0.1971,
-      "agreed": false
+      "agreed": false,
+      "valence": 0.3754,
+      "arousal": 0.5862
     },
     {
       "scene": 26,
@@ -331,7 +391,9 @@
       "confidence": 0.2395,
       "second_opinion": "Disgust",
       "second_confidence": 0.2453,
-      "agreed": false
+      "agreed": false,
+      "valence": 0.336,
+      "arousal": 0.6265
     },
     {
       "scene": 27,
@@ -342,7 +404,9 @@
       "confidence": 0.3436,
       "second_opinion": "Anger",
       "second_confidence": 0.2221,
-      "agreed": false
+      "agreed": false,
+      "valence": 0.215,
+      "arousal": 0.74
     },
     {
       "scene": 28,
@@ -353,7 +417,9 @@
       "confidence": 0.3295,
       "second_opinion": "Anger",
       "second_confidence": 0.2189,
-      "agreed": false
+      "agreed": false,
+      "valence": 0.1601,
+      "arousal": 0.7799
     },
     {
       "scene": 29,
@@ -364,7 +430,9 @@
       "confidence": 0.3588,
       "second_opinion": "Neutral",
       "second_confidence": 0.2938,
-      "agreed": true
+      "agreed": true,
+      "valence": 0.2585,
+      "arousal": 0.589
     },
     {
       "scene": 30,
@@ -375,7 +443,9 @@
       "confidence": 0.404,
       "second_opinion": "Neutral",
       "second_confidence": 0.28,
-      "agreed": true
+      "agreed": true,
+      "valence": 0.2617,
+      "arousal": 0.5753
     },
     {
       "scene": 31,
@@ -386,7 +456,9 @@
       "confidence": 0.6106,
       "second_opinion": "Neutral",
       "second_confidence": 0.5517,
-      "agreed": true
+      "agreed": true,
+      "valence": 0.2198,
+      "arousal": 0.5855
     },
     {
       "scene": 32,
@@ -397,7 +469,9 @@
       "confidence": 0.3994,
       "second_opinion": "Neutral",
       "second_confidence": 0.2857,
-      "agreed": true
+      "agreed": true,
+      "valence": 0.326,
+      "arousal": 0.3384
     },
     {
       "scene": 33,
@@ -408,7 +482,9 @@
       "confidence": 0.2956,
       "second_opinion": "Disgust",
       "second_confidence": 0.2052,
-      "agreed": false
+      "agreed": false,
+      "valence": 0.2346,
+      "arousal": 0.709
     },
     {
       "scene": 34,
@@ -419,7 +495,9 @@
       "confidence": 0.404,
       "second_opinion": "Disgust",
       "second_confidence": 0.2797,
-      "agreed": false
+      "agreed": false,
+      "valence": 0.4825,
+      "arousal": 0.4846
     },
     {
       "scene": 35,
@@ -430,7 +508,9 @@
       "confidence": 0.398,
       "second_opinion": "Neutral",
       "second_confidence": 0.4579,
-      "agreed": false
+      "agreed": false,
+      "valence": 0.4096,
+      "arousal": 0.4315
     },
     {
       "scene": 36,
@@ -441,7 +521,9 @@
       "confidence": 0.3356,
       "second_opinion": "Neutral",
       "second_confidence": 0.4892,
-      "agreed": true
+      "agreed": true,
+      "valence": 0.3272,
+      "arousal": 0.4391
     },
     {
       "scene": 37,
@@ -452,7 +534,9 @@
       "confidence": 0.6734,
       "second_opinion": "Neutral",
       "second_confidence": 0.5193,
-      "agreed": true
+      "agreed": true,
+      "valence": 0.5163,
+      "arousal": 0.6004
     },
     {
       "scene": 38,
@@ -463,7 +547,9 @@
       "confidence": 0.3902,
       "second_opinion": "Neutral",
       "second_confidence": 0.2317,
-      "agreed": true
+      "agreed": true,
+      "valence": 0.3545,
+      "arousal": 0.5561
     },
     {
       "scene": 39,
@@ -474,7 +560,9 @@
       "confidence": 0.5331,
       "second_opinion": "Neutral",
       "second_confidence": 0.4072,
-      "agreed": true
+      "agreed": true,
+      "valence": 0.4389,
+      "arousal": 0.3712
     },
     {
       "scene": 40,
@@ -485,7 +573,9 @@
       "confidence": 0.49,
       "second_opinion": "Joy",
       "second_confidence": 0.4416,
-      "agreed": false
+      "agreed": false,
+      "valence": 0.8244,
+      "arousal": 0.6081
     },
     {
       "scene": 41,
@@ -496,7 +586,9 @@
       "confidence": 0.2866,
       "second_opinion": "Disgust",
       "second_confidence": 0.2238,
-      "agreed": false
+      "agreed": false,
+      "valence": 0.2498,
+      "arousal": 0.6018
     },
     {
       "scene": 42,
@@ -507,7 +599,9 @@
       "confidence": 0.2436,
       "second_opinion": "Neutral",
       "second_confidence": 0.2299,
-      "agreed": true
+      "agreed": true,
+      "valence": 0.3394,
+      "arousal": 0.6418
     },
     {
       "scene": 43,
@@ -518,7 +612,9 @@
       "confidence": 0.2458,
       "second_opinion": "Disgust",
       "second_confidence": 0.4466,
-      "agreed": false
+      "agreed": false,
+      "valence": 0.6482,
+      "arousal": 0.5108
     },
     {
       "scene": 44,
@@ -529,7 +625,9 @@
       "confidence": 0.7691,
       "second_opinion": "Joy",
       "second_confidence": 0.6007,
-      "agreed": true
+      "agreed": true,
+      "valence": 0.7341,
+      "arousal": 0.5438
     },
     {
       "scene": 45,
@@ -540,7 +638,9 @@
       "confidence": 0.3087,
       "second_opinion": "Disgust",
       "second_confidence": 0.3464,
-      "agreed": false
+      "agreed": false,
+      "valence": 0.2877,
+      "arousal": 0.6152
     },
     {
       "scene": 46,
@@ -551,7 +651,9 @@
       "confidence": 0.6585,
       "second_opinion": "Joy",
       "second_confidence": 0.3478,
-      "agreed": false
+      "agreed": false,
+      "valence": 0.8493,
+      "arousal": 0.3979
     }
   ]
 }

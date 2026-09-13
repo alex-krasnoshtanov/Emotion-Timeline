@@ -314,7 +314,9 @@ def test_the_table_refuses_a_transcript_that_does_not_match() -> None:
 def test_the_csv_carries_both_predictions_and_both_confidences(tmp_path: Path) -> None:
     written = pipeline.write_csv(pipeline.table(committed(), transcript()), tmp_path / "t.csv")
     header = written.read_text(encoding="utf-8").splitlines()[0]
-    assert header.split(",") == list(pipeline.CSV_COLUMNS)
+    # The valence columns ride along only when the record carries them, so the
+    # base columns have to come first and in order either way.
+    assert header.split(",")[: len(pipeline.CSV_COLUMNS)] == list(pipeline.CSV_COLUMNS)
     for column in ("emotion", "confidence", "second_opinion", "second_confidence", "agreed"):
         assert column in header
 
@@ -516,6 +518,75 @@ def test_the_figure_renders_and_is_stamped_with_the_record(tmp_path: Path) -> No
     written = pipeline_figures.render_all(committed(), tmp_path)
     assert len(written) == len(pipeline_figures.FIGURES)
     assert shared.read_stamp(written[0]) == committed().digest
+
+
+def bare() -> pipeline.Timeline:
+    """The committed timeline with the optional dimensions stripped back off."""
+    report = committed()
+    raw = json.loads(json.dumps(report.raw))
+    raw.pop("valence_arousal", None)
+    raw["timeline"] = [
+        {key: value for key, value in scene.items() if key not in pipeline.VA_COLUMNS}
+        for scene in raw["timeline"]
+    ]
+    return pipeline.Timeline(raw=raw, source=report.source, digest=report.digest)
+
+
+def test_a_timeline_without_valence_is_the_normal_case() -> None:
+    """Off by default, so every check has to hold with the columns absent."""
+    report = bare()
+    assert pipeline.check_consistency(report, transcript()) == []
+    rows = pipeline.table(report, transcript())
+    assert "valence" not in rows[0]
+
+
+def test_the_csv_drops_the_valence_columns_when_the_record_has_none(tmp_path: Path) -> None:
+    written = pipeline.write_csv(pipeline.table(bare(), transcript()), tmp_path / "t.csv")
+    assert written.read_text(encoding="utf-8").splitlines()[0].split(",") == list(
+        pipeline.CSV_COLUMNS
+    )
+
+
+def test_the_figure_renders_with_and_without_the_valence_band(tmp_path: Path) -> None:
+    from emotion_timeline.pipeline import figures as pipeline_figures
+
+    with_band = pipeline_figures.render_all(committed(), tmp_path / "with")[0]
+    without = pipeline_figures.render_all(bare(), tmp_path / "without")[0]
+    # The band adds a row, so the taller image is the one carrying valence.
+    assert with_band.stat().st_size != without.stat().st_size
+
+
+def test_a_record_where_only_some_scenes_carry_valence_is_caught() -> None:
+    """It used to pass every check and then crash the CSV writer, which reads row 0."""
+    report = committed()
+    raw = json.loads(json.dumps(report.raw))
+    del raw["timeline"][5]["arousal"]
+    del raw["timeline"][5]["valence"]
+    broken = pipeline.Timeline(raw=raw, source=report.source, digest=report.digest)
+    assert any("all of them or none" in problem for problem in pipeline.check_consistency(broken))
+
+
+def test_a_header_that_disagrees_with_the_columns_is_caught() -> None:
+    """Otherwise the page prints the model's AUC under a chart with no band."""
+    report = bare()
+    raw = json.loads(json.dumps(report.raw))
+    raw["valence_arousal"] = {"name": "va-v1"}
+    broken = pipeline.Timeline(raw=raw, source=report.source, digest=report.digest)
+    assert any("header and the per-scene columns" in p for p in pipeline.check_consistency(broken))
+
+
+def test_a_valence_outside_the_sigmoid_range_is_caught() -> None:
+    assert any(
+        "not a sigmoid output" in problem
+        for problem in pipeline.check_consistency(broken(valence=1.7))
+    )
+
+
+def test_the_committed_timeline_carries_the_valence_model_and_its_caveat() -> None:
+    block = committed().raw["valence_arousal"]
+    assert block["name"] == "va-v1"
+    assert block["improves_the_label"] is False
+    assert "display only" in block["caveat"]
 
 
 def test_the_committed_figure_is_current() -> None:

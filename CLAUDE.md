@@ -119,6 +119,7 @@ uv run emotion-timeline model                     # the trained classifier's two
 uv run emotion-timeline errors                    # where the classifier fails
 uv run emotion-timeline russian                   # translate or classify natively
 uv run emotion-timeline timeline                  # the per-scene emotion timeline
+uv run emotion-timeline valence                   # what valence and arousal add (nothing)
 uv run emotion-timeline serve                     # the pipeline in a browser
 uv run emotion-timeline figures --out assets      # regenerate every figure, every stage
 

@@ -45,7 +45,14 @@ from emotion_timeline.web.jobs import Job, JobStore
 URL_FIELD = Form(default="")
 GAP_FIELD = Form(default=pipeline.GAP_SECONDS)
 VAD_FIELD = Form(default=True)
+VALENCE_FIELD = Form(default=False)
 FILE_FIELD = File(default=None)
+
+#: Where the optional valence-arousal checkpoint is expected. Anchored to the
+#: repository rather than the working directory, so `serve` reports the same
+#: thing wherever it is started -- `demo_available` on the line above is anchored
+#: and the two must not disagree in one response.
+VA_CHECKPOINT = pipeline.ROOT / "models" / "va-v1"
 
 STATIC = Path(__file__).resolve().parent / "static"
 
@@ -121,6 +128,7 @@ def run_job(  # pragma: no cover - downloads, transcribes and loads three models
     gap: float,
     vad: bool,
     downloads: Path,
+    valence: bool = False,
 ) -> None:
     """The whole pipeline for one job, on a worker thread."""
     from emotion_timeline.pipeline import transcribe
@@ -134,7 +142,13 @@ def run_job(  # pragma: no cover - downloads, transcribes and loads three models
         if not segments:
             raise RuntimeError("the transcript came back empty; is there speech in this?")
         job.say(f"{len(segments):,} segments transcribed")
-        record = scoring.score(segments, source=job.source, gap=gap, progress=job.say)
+        record = scoring.score(
+            segments,
+            source=job.source,
+            gap=gap,
+            progress=job.say,
+            valence=str(VA_CHECKPOINT) if valence else None,
+        )
         job.finish(
             {
                 "header": {k: v for k, v in record.items() if k != "timeline"},
@@ -171,6 +185,13 @@ def build_app(downloads: str | Path = "downloads", store: JobStore | None = None
                 "chunk_chars": pipeline.CHUNK_CHARS,
                 "caveat": scoring.AGREEMENT_CAVEAT,
                 "demo_available": pipeline.DEFAULT_TIMELINE.exists(),
+                "valence_available": VA_CHECKPOINT.exists(),
+                "valence_note": (
+                    "Valence and arousal, from a published multilingual model. "
+                    "Measured on held-out Russian to add nothing to the emotion "
+                    "label, so it is shown beside the label and never used to "
+                    "pick it."
+                ),
             }
         )
 
@@ -185,11 +206,22 @@ def build_app(downloads: str | Path = "downloads", store: JobStore | None = None
         url: str = URL_FIELD,
         gap: float = GAP_FIELD,
         vad: bool = VAD_FIELD,
+        valence: bool = VALENCE_FIELD,
         file: UploadFile | None = FILE_FIELD,
     ) -> JSONResponse:
         has_file = file is not None and bool(file.filename)
         if has_file == bool(url.strip()):
             raise HTTPException(400, "give either a link or a file, not both and not neither")
+
+        if valence and not VA_CHECKPOINT.exists():
+            # Before the upload is streamed to disk: `run_job` owns the only
+            # unlink, and it is never started when this fires.
+            raise HTTPException(
+                400,
+                "the valence checkpoint is not on disk; fetch it with "
+                '`python -c "from emotion_timeline import weights; '
+                "weights.get_model_dir('va-v1', 'models/va-v1')\"`",
+            )
 
         try:
             checked_gap = validate_gap(gap)
@@ -220,7 +252,7 @@ def build_app(downloads: str | Path = "downloads", store: JobStore | None = None
         job = jobs.create(source=source, kind="file" if has_file else "link")
         threading.Thread(
             target=run_job,
-            args=(job, upload, checked_gap, vad, downloads_dir),
+            args=(job, upload, checked_gap, vad, downloads_dir, valence),
             daemon=True,
         ).start()
         return JSONResponse(job.summary(), status_code=202)

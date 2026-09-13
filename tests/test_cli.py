@@ -98,6 +98,35 @@ def test_errors_prints_the_headline_and_the_hardest_classes(
     assert "ALL-CAPS word" in out
 
 
+# --- valence -----------------------------------------------------------------
+
+
+def test_valence_prints_what_both_halves_of_the_record_say(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    assert cli.main(["valence"]) == 0
+    out = capsys.readouterr().out
+    assert "AUC 0.8223" in out and "separates them" in out
+    assert "AUC 0.5734" in out and "barely separates them" in out
+    assert "no measurable gain" in out
+    assert "the class prior, not skill" in out
+
+
+def test_valence_refuses_a_record_that_contradicts_itself(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A gain claimed without the p value agreeing is the failure that matters."""
+    from emotion_timeline.russian import va
+
+    raw = json.loads(Path(va.DEFAULT_RECORD).read_text(encoding="utf-8"))
+    raw["contribution"]["significant"] = True
+    broken = tmp_path / "broken.json"
+    broken.write_text(json.dumps(raw), encoding="utf-8")
+
+    assert cli.main(["valence", "--record", str(broken)]) == 1
+    assert "inconsistent record" in capsys.readouterr().err
+
+
 # --- timeline ----------------------------------------------------------------
 
 

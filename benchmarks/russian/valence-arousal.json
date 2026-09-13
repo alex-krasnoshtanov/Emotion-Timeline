@@ -1,0 +1,183 @@
+{
+  "_comment": [
+    "Valence and arousal from a published multilingual regressor, scored",
+    "against this project's own seven-class labels. Russell's circumplex",
+    "predicts valence ranks Joy above the negative classes and arousal",
+    "ranks Anger/Fear/Surprise above Sadness/Neutral; both are checked",
+    "here. `contribution` is the other half: what the two dimensions add",
+    "to the classifiers, measured by a stacker fitted on validation and",
+    "scored on test; `alternatives` holds what else was tried and failed.",
+    "Written by `emotion-timeline valence --rescore` (needs --extra model)."
+  ],
+  "model": "va-v1",
+  "citation": "Mendes & Martins, Quantifying Valence and Arousal in Text with Multilingual Pre-trained Transformers, ECIR 2023 (arXiv:2302.14021)",
+  "samples": 3715,
+  "valence": {
+    "by_class": {
+      "Anger": {
+        "samples": 360,
+        "mean": 0.3745
+      },
+      "Disgust": {
+        "samples": 407,
+        "mean": 0.3219
+      },
+      "Fear": {
+        "samples": 285,
+        "mean": 0.3356
+      },
+      "Joy": {
+        "samples": 687,
+        "mean": 0.5814
+      },
+      "Neutral": {
+        "samples": 1163,
+        "mean": 0.4332
+      },
+      "Sadness": {
+        "samples": 568,
+        "mean": 0.3521
+      },
+      "Surprise": {
+        "samples": 245,
+        "mean": 0.4825
+      }
+    },
+    "separation": {
+      "above": [
+        "Joy"
+      ],
+      "below": [
+        "Anger",
+        "Disgust",
+        "Fear",
+        "Sadness"
+      ],
+      "samples": 2307,
+      "mean_above": 0.5814,
+      "mean_below": 0.3466,
+      "gap": 0.2348,
+      "auc": 0.8223
+    }
+  },
+  "arousal": {
+    "by_class": {
+      "Anger": {
+        "samples": 360,
+        "mean": 0.5231
+      },
+      "Disgust": {
+        "samples": 407,
+        "mean": 0.5133
+      },
+      "Fear": {
+        "samples": 285,
+        "mean": 0.5339
+      },
+      "Joy": {
+        "samples": 687,
+        "mean": 0.4635
+      },
+      "Neutral": {
+        "samples": 1163,
+        "mean": 0.4677
+      },
+      "Sadness": {
+        "samples": 568,
+        "mean": 0.493
+      },
+      "Surprise": {
+        "samples": 245,
+        "mean": 0.5001
+      }
+    },
+    "separation": {
+      "above": [
+        "Anger",
+        "Fear",
+        "Surprise"
+      ],
+      "below": [
+        "Sadness",
+        "Neutral"
+      ],
+      "samples": 2621,
+      "mean_above": 0.5202,
+      "mean_below": 0.476,
+      "gap": 0.0442,
+      "auc": 0.5734
+    },
+    "original_levels": {
+      "cuts": [
+        0.2,
+        0.4,
+        0.6,
+        0.8
+      ],
+      "counts": [
+        185,
+        940,
+        1628,
+        825,
+        137
+      ]
+    }
+  },
+  "contribution": {
+    "_comment": "A stacker over both classifiers, fitted on validation and scored on test, with and without the two dimensions as extra features.",
+    "without": 0.5009,
+    "with": 0.5036,
+    "gained": 54,
+    "lost": 44,
+    "net": 10,
+    "delta": 0.0027,
+    "p_value": 0.3634,
+    "significant": false,
+    "verdict": "no measurable gain, so this is display-only and off by default"
+  },
+  "alternatives": {
+    "arousal-neutral": {
+      "what": "low arousal means Neutral where they disagree",
+      "threshold_fitted_on_validation": 0.82,
+      "accuracy": 0.4681,
+      "baseline": 0.4816,
+      "gained": 144,
+      "lost": 194,
+      "net": -50,
+      "delta": -0.0135,
+      "p_value": 0.0076,
+      "significant": true,
+      "note": "144 right, 194 wrong; 0.4681 against 0.4816"
+    },
+    "valence-joy": {
+      "what": "valence picks the positive candidate",
+      "threshold_fitted_on_validation": 0.24,
+      "accuracy": 0.4649,
+      "baseline": 0.4816,
+      "gained": 68,
+      "lost": 130,
+      "net": -62,
+      "delta": -0.0167,
+      "p_value": 0.0,
+      "significant": true,
+      "note": "68 right, 130 wrong; 0.4649 against 0.4816"
+    },
+    "learned-stacker": {
+      "what": "a stacker over both classifiers, against the native model's argmax",
+      "accuracy": 0.5036,
+      "baseline": 0.4816,
+      "gained": 212,
+      "lost": 130,
+      "net": 82,
+      "delta": 0.0221,
+      "p_value": 0.0,
+      "significant": true,
+      "balanced_accuracy": 0.4527,
+      "baseline_balanced_accuracy": 0.4559,
+      "neutral_share": 0.4474,
+      "baseline_neutral_share": 0.3518,
+      "gold_neutral_share": 0.3131,
+      "note": "accuracy 0.5036 against 0.4816, p=0.0000 -- but balanced accuracy 0.4527 against 0.4559, so it is the class prior, not skill"
+    }
+  }
+}
