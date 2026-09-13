@@ -112,10 +112,10 @@
 <main>
   <h1>Emotion Timeline</h1>
   <p class="lede">
-    A Russian-language video in, a per-scene emotion timeline out. Two models read
-    every scene &mdash; one native Russian, one via translation &mdash; and a scene the
-    two disagree on is drawn faded, because with no labels on your video that is the
-    only honest thing this can tell you about which parts to trust.
+    A Russian-language video goes in, a per-scene emotion timeline comes out. Two
+    models read every scene: one reads Russian directly, the other translates first.
+    Scenes where they disagree are drawn faded, so you can see at a glance which
+    parts to treat with caution.
   </p>
 
   <div class="card">
@@ -149,15 +149,17 @@
     </div>
     <p class="note" id="valence-note" style="margin:8px 0 0"></p>
     <p class="note" style="margin:8px 0 0">
-      The filter stops Whisper hallucinating over silence, and on a documentary with
-      music under the narration it drops speech. Turn it off if the transcript has holes.
+      The filter stops Whisper inventing words over silence. On a documentary with
+      music under the narration it can drop real speech too, so turn it off if the
+      transcript comes back with holes in it.
     </p>
     <p class="note warn" id="unavailable" style="margin:8px 0 0" hidden></p>
 
     <div class="actions">
       <button class="run" id="run">Run the pipeline</button>
       <button class="ghost" id="demo">Load the committed example</button>
-      <span class="note" id="hint">First run downloads the models &mdash; several minutes.</span>
+      <span class="note" id="hint">The first run downloads the models, which takes a few
+        minutes.</span>
     </div>
     <p class="note err" id="form-error" style="margin:10px 0 0" hidden></p>
   </div>
@@ -258,7 +260,7 @@ $("file").addEventListener("change", showChosen);
 function showChosen() {
   const file = $("file").files[0];
   $("chosen").hidden = !file;
-  if (file) $("chosen").textContent = `${file.name} — ${(file.size / 1e6).toFixed(1)} MB`;
+  if (file) $("chosen").textContent = `${file.name} (${(file.size / 1e6).toFixed(1)} MB)`;
 }
 
 function formError(message) {
@@ -295,8 +297,8 @@ function renderStatus(job) {
   $("state").className = "state " + job.state;
   // Inside the live region, so a screen reader hears the three stage
   // changes. The elapsed clock is deliberately outside it.
-  $("at").textContent = job.stage && !job.finished ? ` — ${job.stage}` : "";
-  $("err").textContent = job.error ? ` — ${job.error}` : "";
+  $("at").textContent = job.stage && !job.finished ? ` (${job.stage})` : "";
+  $("err").textContent = job.error ? `. ${job.error}` : "";
   $("elapsed").textContent = job.elapsed_s ? `${clock(job.elapsed_s)} elapsed` : "";
   $("cancel").hidden = job.finished || job.stopping;
   renderSteps(job);
@@ -308,7 +310,7 @@ function lostContact(message) {
   stopPolling();
   $("state").textContent = "unreachable";
   $("state").className = "state failed";
-  $("err").textContent = ` — ${message}`;
+  $("err").textContent = `. ${message}`;
   $("cancel").hidden = true;
 }
 
@@ -317,7 +319,7 @@ async function poll(id) {
   try {
     const res = await fetch(`/api/jobs/${id}`);
     if (res.status === 404) {
-      lostContact("the server has forgotten this run; it was probably restarted");
+      lostContact("The server no longer has this run. It was probably restarted.");
       return;
     }
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -326,7 +328,7 @@ async function poll(id) {
   } catch (error) {
     FAILURES += 1;
     if (FAILURES >= GIVE_UP_AFTER) {
-      lostContact("lost contact with the server — is `emotion-timeline serve` still running?");
+      lostContact("Lost contact with the server. Is it still running?");
     }
     return;
   }
@@ -355,7 +357,7 @@ $("run").onclick = async () => {
   const form = new FormData();
   if (isFile) {
     const file = $("file").files[0];
-    if (!file) { formError("Choose a file, or drop one on the box."); return; }
+    if (!file) { formError("Choose a file, or drop one onto the box."); return; }
     // Checked here as well as on the server, so a 600 MB file is refused before
     // it is uploaded rather than after.
     if (file.size > META.max_upload_bytes) {
@@ -524,7 +526,7 @@ function show(payload, what, source) {
   const rows = payload.timeline, header = payload.header;
   const agreed = rows.filter((r) => r.agreed).length;
   const confs = rows.map((r) => r.confidence).sort((a, b) => a - b);
-  $("provenance").innerHTML = `<b>${esc(what)}</b> — ${esc(source || header.source || "")}`;
+  $("provenance").innerHTML = `<b>${esc(what)}</b>: ${esc(source || header.source || "")}`;
   $("stats").innerHTML =
     stat(rows.length, "scenes")
     + stat(clock(header.duration_s), "length")
@@ -539,7 +541,8 @@ function show(payload, what, source) {
   if (va) {
     $("va-caveat").textContent =
       `Valence and arousal: ${va.citation}. ${va.caveat} `
-      + `Separation on held-out Russian — valence AUC ${va.valence_auc}, arousal AUC ${va.arousal_auc}.`;
+      + `Separation on held-out Russian: valence AUC ${va.valence_auc}, `
+      + `arousal AUC ${va.arousal_auc}.`;
   }
   // Visible first: the chart measures its container, and a hidden one is 0 wide.
   $("results").classList.add("on");
@@ -549,7 +552,7 @@ function show(payload, what, source) {
       <td class="num">${clock(r.start_s)}</td>
       <td><span class="chip" style="background:${META.colours[r.emotion]};color:${readable(META.colours[r.emotion])}">${r.emotion}</span></td>
       <td class="num">${r.confidence.toFixed(3)}</td>
-      <td class="split">${r.agreed ? "agrees" : esc(r.second_opinion) + " &mdash; disagrees"}</td>
+      <td class="split">${r.agreed ? "agrees" : esc(r.second_opinion) + ", disagrees"}</td>
       <td>${r.text ? esc(r.text) : ""}</td>
     </tr>`).join("");
 }
@@ -597,11 +600,11 @@ async function loadDemo() {
   $("gap").value = META.default_gap;
   $("file").accept = META.media_suffixes.join(",");
   $("file-note").textContent =
-    `… or drop one here. Up to ${(META.max_upload_bytes / 1e6).toFixed(0)} MB: `
-    + META.media_suffixes.join(" ") + ".";
+    `… or drop one here. Up to ${(META.max_upload_bytes / 1e6).toFixed(0)} MB, `
+    + `in any of: ${META.media_suffixes.join(" ")}`;
   $("demo").disabled = !META.demo_available;
   $("valence-note").textContent = META.valence_note
-    + (META.valence_available ? "" : " — unavailable: the checkpoint is not downloaded.");
+    + (META.valence_available ? "" : " Unavailable here: the checkpoint has not been downloaded.");
   $("valence").disabled = !META.valence_available;
 
   const missing = [];

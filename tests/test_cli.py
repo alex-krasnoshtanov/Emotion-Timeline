@@ -140,7 +140,7 @@ def test_timeline_prints_the_scene_breakdown_and_the_agreement(
     # The headline of the chapter: a documentary narration is mostly Neutral.
     assert "Neutral   26  55.3%" in out
     assert "agree on 17 of 47 scenes (36.2%)" in out
-    assert "not an accuracy" in out
+    assert "both still be wrong" in out
 
 
 def test_timeline_reports_how_much_a_second_transcriber_moves_it(

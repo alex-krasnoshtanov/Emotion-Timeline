@@ -75,7 +75,7 @@ def figure_averaging(report: SelectionReport, path: Path) -> Path:
     ax.set_xlabel("F1", color=figures.MUTED, fontsize=9)
     biggest = report.swings()[0]
     ax.set_title(
-        f"Below the top two, the ranking is a choice of average — "
+        f"Below the top two, the ranking is a choice of average: "
         f"{biggest.label.split()[0]} moves {abs(biggest.places)} places",
         color=figures.INK,
         fontsize=12.5,
@@ -85,7 +85,7 @@ def figure_averaging(report: SelectionReport, path: Path) -> Path:
     ax.text(
         0,
         1.02,
-        f"{report.dataset}, {report.split} — ordered by the macro F1 the log did not report",
+        f"{report.dataset}, {report.split}, ordered by the macro F1 the log did not report",
         transform=ax.transAxes,
         color=figures.MUTED,
         fontsize=9.5,
@@ -173,7 +173,7 @@ def figure_evaluation_sets(report: SelectionReport, path: Path) -> Path:
     )
     if len(marked) == 2:
         shared = shared_evaluation_size([divisor for _, divisor in marked])
-        counted += f" — one set holding both marked runs would need {shared:,} samples"
+        counted += f"; one set holding both marked runs would need {shared:,} samples"
     ax.text(
         0,
         1.02,

@@ -14,11 +14,11 @@ evaluation. Five of its seven per-class supports are the card's own, to the row.
 
 ## What was trained
 
-`distilbert-base-uncased`, seven classes, single-label. The architecture is not a
-guess and it is not a judgement: the one thing that survives of the original
-training run is a 30,522-token vocabulary, which is exactly this checkpoint's.
+`distilbert-base-uncased`, seven classes, single-label. The architecture follows
+the evidence: the one thing that survives of the original training run is a
+30,522-token vocabulary, which is exactly this checkpoint's.
 [`model.md`](model.md) declines to say whether that or the card's DeBERTa-V2
-claim is the wrong record, and **nothing here settles it either** — training the
+claim is the wrong record, and **nothing here settles it either**. Training the
 architecture the surviving evidence points at makes two tables worth putting side
 by side, and no more than that.
 
@@ -70,7 +70,7 @@ Five of six comparable classes ahead, one fractionally behind.
 0.9164 against 0.8995, and 0.8088 against 0.8127. Both, at once, and the whole of
 the difference is Disgust. Macro averaging gives Disgust the same weight as Joy,
 and **9,151 of the card's 14,316 Disgust rows are the synthetic file that did not
-survive** — 64% of the class. This model saw 5,165 where the card's saw 14,316,
+survive**, which is 64% of the class. This model saw 5,165 where the card's saw 14,316,
 and scores 0.6218 where the card scores 0.7296.
 
 So no Disgust comparison is published. That is enforced rather than footnoted:
@@ -82,15 +82,15 @@ exist cannot be misread at all.
 ### Neutral gaining most is the interesting one
 
 Neutral is the class the error analysis called the model's worst, and the class
-the card's **mislabelled dataset table** blamed the whole problem on — it called
+the card's **mislabelled dataset table** blamed the whole problem on. It called
 Joy's 149,321 rows Neutral and then reasoned that the data was "skewed toward
 neutral and happiness". Neutral is the smallest class at 3.1%.
 
 It improves most here, by 0.0421, and it is **still the worst class** at a 43.13%
-error rate — worse than the 36.77% the inherited chapter measured. Precision and
-recall both sit near 0.56, so it is not that the model over- or under-uses it;
+error rate, worse than the 36.77% the inherited chapter measured. Precision and
+recall both sit near 0.56, so the model neither over-uses nor under-uses it.
 Neutral is genuinely the hardest of the seven, and more data would be the thing
-to try, not a different loss.
+to try before a different loss.
 
 ## What reproduces, on a different model
 
@@ -112,13 +112,13 @@ for incorrect ones, where the inherited figures were 94.60 and 80.05.
 
 ### One number that does not reproduce, and should not
 
-The inherited chapter counts an ALL-CAPS marker in **4,040 of 64,250** rows —
+The inherited chapter counts an ALL-CAPS marker in **4,040 of 64,250** rows, or
 6.29%. Here it is **737 of 62,877**, or 1.17%, which is what the corpus-wide rate
 predicts: `[CAPS]` survives cleaning in 1.19% of all 419,180 rows.
 
 Five times apart is not rounding. `mark_shouting` lowercases the text and replaces
 a shouted word with a marker, so counting capitals on the cleaned text finds none
-at all — the inherited analysis cannot have been measuring the text its model saw.
+at all, and the inherited analysis cannot have been measuring the text its model saw.
 That does not undermine its finding, which reproduces above. It does mean the
 4,040 is not a count of anything in the training data.
 
@@ -137,8 +137,8 @@ the set it is reported over. Accuracy does not move and cannot: scaling every
 logit by the same number never reorders the classes. What moves is how much the
 number beside a prediction can be believed.
 
-**A threshold is still not a fix.** 1,448 of the 5,254 errors — 27.6% — are made
-at 0.7 or above, so more than a quarter of them survive the card's own advice to
+**A threshold is still not a fix.** 1,448 of the 5,254 errors, 27.6% of them, are
+made at 0.7 or above, so more than a quarter survive the card's own advice to
 trust anything past that. The inherited chapter reports 625 of 6,454, but does
 not record what threshold it used, so the two are not comparable and the higher
 share here may be no more than this model being more confident throughout.
@@ -166,7 +166,7 @@ numbers are in the record, including the one that limits the claim.
 | won't, didn't, can't, aww, ugh | successful, unsure, defeated, numb, determined |
 
 Negated contractions and interjections on one side; explicit affect words on the
-other. That is the same story the surface markers tell — the model does well when
+other. That is the same story the surface markers tell: the model does well when
 the emotion is named and badly when it has to be inferred through negation or
 tone.
 
@@ -191,9 +191,9 @@ consistency.
 The Russian chapter needed to know what translation costs, and answering that
 produced the sharpest limit on this number that anything here has found.
 
-Take these same held-out rows — 3,000 of them — and push them through English →
-Russian → English with an ordinary machine translator. The meaning survives; the
-wording does not.
+Take 3,000 of these same held-out rows and push them through English → Russian →
+English with an ordinary machine translator. The meaning survives; the wording
+does not.
 
 | | Accuracy | Macro F1 |
 | --- | ---: | ---: |
@@ -216,8 +216,8 @@ recomputes it; [`russian.md`](russian.md) has the rest.
 
 - **That this model is better than the one the card describes.** It is better on
   six classes of a nearly-identical evaluation set, which is what is claimed.
-  They are different sets — 62,877 against 64,250 — and one of them included
-  9,151 rows nobody can inspect.
+  They are different sets, 62,877 against 64,250, and one of them included 9,151
+  rows nobody can inspect.
 - **Which architecture was originally trained.** Training a DistilBERT now says
   nothing about what was trained then. That question is still open and
   [`model.md`](model.md) still declines to answer it.
@@ -234,5 +234,5 @@ recomputes it; [`russian.md`](russian.md) has the rest.
   evaluation touches.
 - **That the round trip isolates *paraphrase* specifically.** It holds domain,
   labels, annotator and model fixed, which is what it was built to do. It cannot
-  say which part of the rewrite — word choice, syntax, register — the model was
+  say which part of the rewrite (word choice, syntax, register) the model was
   depending on, only that something wording-shaped carried a third of the score.

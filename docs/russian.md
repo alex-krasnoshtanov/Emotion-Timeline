@@ -1,8 +1,8 @@
 # Russian: translate, or classify it directly?
 
 The pipeline this project is named for reads Russian. Everything else here is
-trained on English. The original coursework resolved that by judgement — there
-was no good Russian emotion dataset, so translate — and never scored the decision
+trained on English. The original coursework settled it by judgement: there was
+no good Russian emotion dataset, so translate. The decision was never scored
 against anything.
 
 ```bash
@@ -42,7 +42,7 @@ anything measured on it can be carried, and it comes back in every section below
 which is the only reason the two builds are comparable at all.
 
 **`enthusiasm` is the real decision, and it is four times smaller than it looks.**
-5,185 rows carry the column — 21% of the set — so merging it into Joy reads like a
+5,185 rows carry the column, 21% of the set, so merging it into Joy reads like a
 large intervention. It is not: only **1,115** rows actually change class, because
 the rest already carry a label the priority collapse prefers. `--drop-enthusiasm`
 builds the other version, 1,115 rows shorter with Joy at 3,467 instead of 4,582.
@@ -53,9 +53,9 @@ builds the other version, 1,115 rows shorter with Joy at 3,467 instead of 4,582.
 | --- | ---: | ---: |
 | Neutral | **31.3%** | **3.2%** |
 
-Ten times the share, on the class our model is already worst at — a 43% error rate
-in [`fine-tune.md`](fine-tune.md). A test asserts both shares so the point cannot
-quietly go missing.
+Ten times the share, on the class our model is already worst at, where
+[`fine-tune.md`](fine-tune.md) measures a 43% error rate. A test asserts both
+shares so this cannot quietly go missing.
 
 ## Five approaches, 3,715 held-out rows
 
@@ -69,15 +69,15 @@ quietly go missing.
 
 **On this corpus, classifying Russian directly beats translating it by eleven
 points**, and it also beats the model the pipeline actually shipped. D carries an
-advantage that cannot be stripped from it — it reports ru-izard's own ten columns,
+advantage that cannot be stripped from it: it reports ru-izard's own ten columns,
 which is the tell that it was **trained on the corpus this scores it against**, so
 0.4538 is an upper bound rather than a measurement. That caveat lives in the
 record beside the number.
 
 C's 0.3157 comes with its own discount: **20% of its top answers** were a class our
 label map could only approximate. A prediction we refuse to map is scored wrong
-regardless, which measures our map rather than the model — so it is mapped, and
-the share is published.
+regardless, which measures our map rather than the model, so it is mapped and the
+share is published.
 
 ### The bug that made the first version of this table wrong
 
@@ -94,15 +94,15 @@ The first version of this chapter fed it whole rows:
 Splitting on sentence boundaries first and rejoining afterwards fixes it, and
 cleaning the output the way the training set was cleaned costs nothing either way.
 Together they move A from **0.3631 to 0.3728**. A real bug, a real correction, and
-**it does not change the ranking** — which is worth saying plainly, because it
-would have been easy to report the fix as though it had.
+**it does not change the ranking**. Worth saying plainly, because it would have
+been easy to report the fix as though it had.
 
 ## What translation costs, measured on its own
 
 The comparison above cannot separate translation from domain from label
 conventions: A and B are scored on the same rows, but A's number carries all
 three. So here is the same question with everything except translation held
-fixed — and it needs no Russian ground truth at all.
+fixed, and it needs no Russian ground truth at all.
 
 Take the model's **own English held-out rows**, push them through English →
 Russian → English, and score them again. Same domain, same labels, same
@@ -121,15 +121,15 @@ different corpora and were never comparable.
 
 **And a much better translator barely helps.** NLLB-600M is roughly six times the
 size of the opus-mt pair and trained on 200 languages. It recovers **0.0270 of the
-0.3700** — about seven per cent of the loss. On the Russian set itself it does not
+0.3700**, about seven per cent of the loss. On the Russian set itself it does not
 help either: A-NLLB scores 0.3612 against A's 0.3728, a difference of 43 rows and
 **about one standard error**, so the two translators are indistinguishable there.
-What is not indistinguishable is the gap to B, at nine and a half. So the loss is
-not the translator's quality. It is the paraphrase.
+The gap to B, at nine and a half standard errors, is not. So what costs the
+accuracy is the paraphrase, and not the quality of the translator.
 
 The obvious explanation is ruled out too. `error-analysis.md` found this model
-leans on surface markers, and translation rewrites punctuation freely — but the
-markers **survive**:
+leans on surface markers, and translation rewrites punctuation freely. The
+markers **survive** anyway:
 
 | Share of rows carrying | Original | opus-mt | NLLB |
 | --- | ---: | ---: | ---: |
@@ -140,7 +140,7 @@ markers **survive**:
 They move by a few tenths of a point while accuracy moves by thirty-seven. Whatever
 the model is keyed on, a meaning-preserving rewrite destroys it, and that says
 more about the 0.9164 than it does about translation. A round trip is two passes
-where the pipeline makes one, so these are upper bounds — the one-way cost is
+where the pipeline makes one, so these are upper bounds. The one-way cost is
 smaller, and still large.
 
 ## Why this cannot settle the question the pipeline asks
@@ -158,14 +158,15 @@ benchmark:
   its test rows came out of the same machine translator, so whatever artefacts
   that leaves are signal it can learn.
 
-The pipeline's real input is neither. It is **native Russian speech** — a
-presenter talking — which A would translate once and B has never seen. The
+The pipeline's real input is neither. It is **native Russian speech**, a presenter
+talking, which A would translate once and B has never seen. The
 benchmark is therefore biased towards B by construction, and by an amount nothing
 here can measure.
 
 So the defensible claim is: **on ru-izard, a native model beats a translated
-one.** The claim the earlier version made — that the coursework's judgement to
-translate was wrong — is **not supported**, and this chapter no longer makes it.
+one.** The earlier version went further and said the coursework's judgement to
+translate was wrong. That is **not supported**, and this chapter no longer says
+it.
 
 ## Does cross-validating two models help?
 
@@ -173,7 +174,7 @@ translate was wrong — is **not supported**, and this chapter no longer makes i
 multiple emotion models (future)"*. It was never built, and could not have been
 settled: there was no Russian ground truth to settle it against.
 
-Only A and B can be combined — both answer in our seven classes, so their
+Only A and B can be combined, because both answer in our seven classes. Their
 probabilities are comparable once each is scaled by its own temperature, fitted on
 its own validation rows. **A's temperature is 2.591 and B's is 1.235**: the
 translated pipeline is far more overconfident.
@@ -190,9 +191,9 @@ drags it down, and picking by confidence does no better because the weaker model
 is the more confident one.
 
 **Where combining pays is as a filter.** On the 44.6% of rows where A and B pick
-the same class, accuracy is 0.5718 — nine points above either alone. Not a better
-model: a *believe this one / look at that one* signal, which is what the timeline
-uses it for. The coverage is published with the accuracy every time, and
+the same class, accuracy is 0.5718, nine points above either alone. That is not a
+better model. It is a *believe this one / look at that one* signal, which is what
+the timeline uses it for. The coverage is published with the accuracy every time, and
 `check_consistency` refuses a record carrying one without the other.
 
 ## What this does not establish
@@ -210,5 +211,5 @@ uses it for. The coverage is published with the accuracy every time, and
   segments at 0.57 beats answering all of them at 0.48 is a product decision.
 - **Anything about a model trained on more Russian data**, or on Russian that was
   not machine-translated. 24,766 rows of translationese is what exists, and the
-  experiment that would settle the chapter's central question — native Russian,
-  natively annotated — cannot be run.
+  experiment that would settle the chapter's central question, native Russian
+  that was natively annotated, cannot be run.

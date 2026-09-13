@@ -30,8 +30,8 @@ DEFAULT_WEIGHTS = "models/distilbert-v1"
 DEFAULT_RUBERT = "models/rubert-v1"
 
 AGREEMENT_CAVEAT = (
-    "agreement here is a consistency signal, not an accuracy: this recording has "
-    "no labels, and two models can agree and both be wrong"
+    "this recording has no labels, so agreement only shows where the two models "
+    "are consistent. They can agree and both still be wrong"
 )
 
 
@@ -117,8 +117,9 @@ def score(  # pragma: no cover - loads two classifiers and a translator
                 "arousal_auc": report.auc_of("arousal"),
                 "improves_the_label": report.helps(),
                 "caveat": (
-                    "display only: measured on held-out Russian to add nothing to "
-                    "the emotion label, and never validated on documentary speech"
+                    "shown for reference only. On held-out Russian these scores made "
+                    "no difference to the emotion label, and they have never been "
+                    "checked against documentary speech"
                 ),
             },
         }

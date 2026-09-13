@@ -3,7 +3,7 @@
 Two records of the trained classifier survive, and they describe different
 models. The card claims DeBERTa-V2-Base evaluated single-label; the committed
 training script is DistilBERT evaluated multi-label. The weights are gone from
-both university repositories, so nothing here is rerun — what follows is what
+both university repositories, so nothing here is rerun. What follows is what
 each record can support on its own numbers.
 
 ```bash
@@ -73,7 +73,7 @@ number of slots, leaving *t* as the only unknown:
 **t = 1.025.** About one row in forty carried more than one label.
 
 The dataset the card names, `cleaned_super_dataset.csv`, is single-label by
-construction — collapsing multi-label rows to one label by priority order is
+construction. Collapsing multi-label rows to one label by priority order is
 [a documented step of the build](dataset.md#the-labels), and it would give
 exactly 1. The script's own `DATA_PATH` is `Super-Iter1.parquet`, the
 pre-collapse file. So the script trained on the multi-label intermediate, not on
@@ -81,8 +81,8 @@ the published dataset.
 
 ### The surviving tokenizer settles the architecture
 
-Three files survived the training run. One is a vocabulary of **30,522 tokens** —
-exactly `distilbert-base-uncased`. The card claims a **128,100-token
+Three files survived the training run. One is a vocabulary of **30,522 tokens**,
+which is exactly `distilbert-base-uncased`. The card claims a **128,100-token
 SentencePiece** vocabulary, which is DeBERTa-V2's.
 
 So the card's architecture section describes a model whose tokenizer is not the
@@ -106,21 +106,20 @@ the 9,151 synthetic Disgust rows. The labels attached to them are not.
 | 13,401 | Fear | **Neutral** |
 
 The labels were attached to a descending-sorted column of counts. Anger and
-Surprise are right by coincidence — they hold the same rank under both
+Surprise are right by coincidence: they hold the same rank under both
 assignments. The other four are shifted.
 
 **The card refutes itself.** Its dataset table calls Joy's 149,321 rows Neutral.
 Its performance table, for the same model on the same data, gives Neutral a
-support of 2,010 — which is 15% of 13,401, not of 149,321. The support column
+support of 2,010, which is 15% of 13,401 rather than of 149,321. The support column
 agrees with the corrected assignment in all seven classes and with the dataset
 table in none of the four it got wrong.
 
 The consequence is not cosmetic. The card's limitations section reasons from the
 broken table: *"the dataset is skewed toward neutral and happiness labels, which
 may cause the model to underperform on low-frequency emotions like fear and
-disgust."* Neutral is the **smallest** class at 3.1%, and it is the class the
-model is worst at — a 36.8% error rate. The diagnosis inverts the actual
-problem. It also spreads: the plan this rebuild was written from quoted the
+disgust."* Neutral is the **smallest** class at 3.1%, and the one the model is
+worst at, with a 36.8% error rate. The diagnosis inverts the actual problem. It also spreads: the plan this rebuild was written from quoted the
 broken distribution verbatim, and so would anyone else reading the card.
 
 ## The stress test does not measure what it was built to measure
@@ -165,8 +164,8 @@ number came from somewhere other than the table beside it.
 | Synthetic | 0.5133 | 0.5321 | **−0.019** |
 
 In domain, confidence separates right from wrong cleanly enough to threshold on.
-On an external corpus the gap halves. On the synthetic set it inverts — wrong
-answers are *more* confident than right ones — so a confidence threshold there
+On an external corpus the gap halves. On the synthetic set it inverts: wrong
+answers are *more* confident than right ones, so a confidence threshold there
 selects against correctness. The card's advice to use ≥ 0.7 holds only for the
 first row.
 
@@ -179,8 +178,9 @@ above is recomputed from the two committed transcriptions in
 table and the six-class average.
 
 The weights are absent from both repositories. What survives of the training run
-is `test_metrics.txt`, `training_args.bin` and `vocab.txt` — no checkpoint, so no
-prediction can be reproduced and no metric re-derived from data. That is why this
+is `test_metrics.txt`, `training_args.bin` and `vocab.txt`. There is no
+checkpoint, so no prediction can be reproduced and no metric re-derived from
+data. That is why this
 stage audits rather than evaluates, and why the plan's intention to ship weights
 as a release asset with a recorded digest cannot be carried out: there is nothing
 to ship.

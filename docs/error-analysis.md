@@ -21,7 +21,7 @@ uv run emotion-timeline errors
 
 A shouted word, an exclamation mark or a question mark each take the model from
 roughly nine-in-ten right to worse than a coin flip. None of these is a semantic
-feature — they are typography. The model has learned to associate emphasis with
+feature. They are typography. The model has learned to associate emphasis with
 emotion, and emphatic text is exactly where the label is most contested.
 
 The ellipsis row is here because leaving it out would be selective. With seven
@@ -32,10 +32,10 @@ samples it carries no weight.
 ![Error rate by class](../assets/error-by-class.png)
 
 Neutral is the worst class at 36.77%, on the smallest support (2,010). That is
-the expected shape — but Fear breaks it, failing 24.87% of the time on 8,003
-samples, the third-largest class. Fear is not rare; it is genuinely ambiguous.
-Its errors scatter across Sadness (535), Neutral (383), Disgust (316) and
-Surprise (315) rather than concentrating on one neighbour.
+the expected shape. Fear breaks it, failing 24.87% of the time on 8,003 samples,
+the third-largest class. Fear is common and still difficult. Its errors scatter
+across Sadness (535), Neutral (383), Disgust (316) and Surprise (315) instead of
+concentrating on one neighbour.
 
 Joy, Anger and Sadness sit between 5.7% and 6.3%. The single largest confusion in
 the matrix is Joy read as Neutral, 638 cases: cheerful but factual sentences
@@ -49,8 +49,8 @@ which is why a class holding 3% of the data absorbs so many mistakes.
 ![Length of correct and incorrect predictions](../assets/error-by-length.png)
 
 Correct predictions average 94.60 characters and 18.56 words; incorrect ones
-average 80.05 and 15.35. Mann–Whitney U is 2.129e8 at p ≈ 7.63e-78 — a gap that
-is small in absolute terms and unarguable in significance, which is what 64,250
+average 80.05 and 15.35. Mann–Whitney U is 2.129e8 at p ≈ 7.63e-78. The gap is
+small in absolute terms and unarguable in significance, which is what 64,250
 samples buys.
 
 Short text is context-poor, and short emphatic text is both context-poor and
@@ -60,10 +60,10 @@ typographically loud, so the two findings compound.
 
 ![Confidence gap](../assets/confidence-gap.png)
 
-Mean confidence is 0.887 when the model is right and 0.428 when it is wrong —
-wide enough to threshold on. But 625 errors, 9.68% of all of them, are made
-confidently. Those are the ones a confidence filter will never catch, and the
-reason a threshold is a mitigation rather than a fix.
+Mean confidence is 0.887 when the model is right and 0.428 when it is wrong,
+which is wide enough to threshold on. But 625 errors, 9.68% of all of them, are
+made confidently. Those are the ones a confidence filter will never catch, and
+the reason a threshold only mitigates the problem.
 
 ## What follows from this
 
@@ -72,7 +72,7 @@ reason a threshold is a mitigation rather than a fix.
   and pass a flag saying emphasis was present.
 - **Reweight Neutral, Fear and Surprise** in training, or mine hard negatives
   from the Joy–Neutral and Fear–Sadness pairs specifically.
-- **Calibrate rather than threshold** — temperature scaling or isotonic
+- **Calibrate rather than threshold.** Temperature scaling or isotonic
   regression with per-class cut-offs, because one global threshold cannot serve a
   model whose per-class error rates span 5.7% to 36.8%.
 - **Route low-margin predictions to review** where the decision matters.
@@ -92,5 +92,5 @@ fails.
 The strongest check is external. The model card, written separately for the same
 split, records per-class **recall**; this report records per-class **error rate**.
 They are the same measurement from opposite directions, and they agree to four
-decimal places across all seven classes —
+decimal places across all seven classes.
 `test_class_error_rates_match_the_model_card_recalls` asserts it.

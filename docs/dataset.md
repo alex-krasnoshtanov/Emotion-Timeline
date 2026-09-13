@@ -1,8 +1,9 @@
 # The dataset
 
-No single public corpus covers seven emotions in the register this project needs
-— television dialogue, not product reviews. This is how one was assembled, what
-assembling it threw away, and which parts of it a reader can rebuild.
+No single public corpus covers seven emotions in television dialogue, which is
+the register this project needs rather than product reviews. This is how one was
+assembled, what assembling it threw away, and which parts of it a reader can
+rebuild.
 
 ```bash
 uv run emotion-timeline dataset                    # the recorded build
@@ -55,10 +56,10 @@ having no seven-class equivalent. The original build meant to relabel them to
 whatever their source annotation named, and relabelled exactly none: the lookup
 was keyed by the capitalised seven-class names while source annotations are
 lowercase and fine-grained, so no candidate ever matched. Fixing the case would
-not have rescued them either — `love` and `admiration` have no seven-class
-target to be relabelled *to*, which is why the class was being removed in the
-first place. The step was ill-defined rather than merely broken, and the honest
-description of what happened is that a fourteenth of the data was dropped.
+not have rescued them either: `love` and `admiration` have no seven-class target
+to be relabelled *to*, which is why the class was being removed in the first
+place. The step was ill-defined rather than merely broken, and what it came to
+was that a fourteenth of the data got dropped.
 
 ## The text pipeline
 
@@ -74,7 +75,7 @@ it measured was the strongest single predictor of a wrong answer in the whole
 study: **56.8% error rate on texts with an ALL-CAPS word against 6.9% without**.
 Erasing case would have deleted that finding along with the signal.
 
-### Deduplication happens halfway through, not at the end
+### Deduplication happens halfway through the funnel
 
 The pipeline is split in two around it, and that is not cosmetic. Before case is
 folded, `Yes indeed` and `yes indeed` are different rows; afterwards they are
@@ -93,10 +94,10 @@ look like one when `[URL]` masking runs. The other **1,658** reach the training
 data as a mangled fragment. Both figures reproduce the original build exactly.
 
 This is not fixed here. The published model was trained on data with the bug in
-it, and the point of this chapter is to describe that data, not a better one that
-was never used. Fixing it is a two-line change — drop `:/` from the emoticon
-pattern, or mask URLs first — and it belongs with a retrain, where its effect can
-be measured rather than assumed.
+it, and this chapter describes that data rather than a cleaner version nobody
+used. The fix is two lines (drop `:/` from the emoticon pattern, or mask URLs
+first) and it belongs with a retrain, where its effect can be measured instead of
+assumed.
 
 ## The labels
 
@@ -131,10 +132,10 @@ there from 35 source emotion names is three rules.
 
 Joy outnumbers Neutral eleven to one, and the three smallest classes are Neutral,
 Disgust and Surprise. Two of those three are the classes the model then fails on
-hardest — Neutral at a 36.8% error rate, Surprise at 22.7%. The exception is
-Fear, which is the third-largest class and still fails a quarter of the time, and
-that is the finding worth having: rarity explains most of the difficulty here,
-and where it does not, something else is going on.
+hardest: Neutral at a 36.8% error rate, Surprise at 22.7%. The exception is Fear,
+which is the third-largest class and still fails a quarter of the time. So rarity
+explains most of the difficulty here, and where it does not, something else is
+going on.
 
 See [`error-analysis.md`](error-analysis.md).
 
@@ -143,7 +144,7 @@ See [`error-analysis.md`](error-analysis.md).
 The published training set is 428,331 rows. This build produces **419,180**. The
 difference is a set of synthetic Disgust examples written for the original
 project, because even after keeping GoEmotions for disgust the class had only
-5,165 rows — under 1.3% of the data.
+5,165 rows, under 1.3% of the data.
 
 That file did not survive, and no copy is committed anywhere. So:
 
@@ -156,7 +157,7 @@ That file did not survive, and no copy is committed anywhere. So:
 Everything else reproduces to the row. Running the build on this machine gave
 all seven published class counts exactly, and the whole funnel except for a
 single text that the deduplication step removed here and the length filter
-removed there — both discard it, so nothing downstream differs.
+removed there. Both discard it, so nothing downstream differs.
 
 ## The cross-check
 
@@ -167,8 +168,8 @@ documents were written months apart, and:
 
 - 15% of 428,331 is 64,250, exactly;
 - 15% of each published class count is that class's held-out support, within one
-  row, across all seven classes — the rounding a stratified split needs to hit an
-  exact total.
+  row, across all seven classes, which is the rounding a stratified split needs
+  to hit an exact total.
 
 Neither number is derivable from the other, so their agreeing is real evidence
 that the error analysis describes a model trained on this data. It is also the
@@ -179,10 +180,10 @@ only such evidence available, because the raw predictions are gone.
 
 - **That the dataset is good.** It establishes what it is. Whether television
   dialogue is well served by a corpus that is three-quarters ISEAR and Twitter is
-  a question the model card has to answer, not this chapter.
+  a question for the model card to answer.
 - **That the seven classes are the right seven.** They are the client's, and the
-  collapse rules above lose real distinctions — every one of the 34,940 Love rows
-  among them.
+  collapse rules above lose real distinctions, including every one of the 34,940
+  Love rows.
 - **That the synthetic Disgust rows are sound.** They cannot be inspected. Any
   Disgust result carries that caveat, and 9,151 of the class's 14,316 rows are
   affected by it.

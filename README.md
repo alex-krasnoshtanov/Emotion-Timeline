@@ -1,15 +1,15 @@
 # Emotion Timeline
 
-**Turning a Russian-language video into a per-scene emotion timeline** — and the
+**Turning a Russian-language video into a per-scene emotion timeline**, plus the
 dataset, model selection and error analysis that had to happen first.
 
 ![47 scenes over 52 minutes; the two models agree on 36% of them](assets/emotion-timeline.png)
 
 A real 51-minute Russian documentary, 316 transcript segments grouped into 47
 scenes, each read by two models trained on different languages. The band is solid
-where the two agree and hatched where they split, because with no labels on a
-documentary that is the only honest thing a timeline can say about which parts of
-itself to believe.
+where the two agree and hatched where they split. With no labels on a documentary,
+where the two models disagree is about all a timeline can tell you about which
+parts of itself to believe.
 
 [![CI](https://github.com/alex-krasnoshtanov/Emotion-Timeline/actions/workflows/ci.yml/badge.svg)](https://github.com/alex-krasnoshtanov/Emotion-Timeline/actions/workflows/ci.yml)
 [![Python 3.12 | 3.13](https://img.shields.io/badge/python-3.12%20%7C%203.13-blue.svg)](https://www.python.org/downloads/)
@@ -17,8 +17,8 @@ itself to believe.
 
 Built for the **Content Intelligence Agency**, who make analytics tools for media
 producers. They wanted to know where the emotional beats of an episode fall. The
-interesting part is not the classifier — it is everything that had to be settled
-before the classifier meant anything: which speech-to-text system to trust, what
+classifier is the least of it. The interesting part is everything that had to be
+settled before it meant anything: which speech-to-text system to trust, what
 to train on when no single emotion dataset covers seven classes in two languages,
 and which of the model's answers not to believe.
 
@@ -60,29 +60,29 @@ marked substitutions, insertions and deletions per segment.
 | Whisper large-v3 | 3.33% | 70 | 2,105 | 241 |
 
 Measured over the same 18.1 minutes, which is as far as the Whisper annotation
-runs. The two reference lengths land within four tokens of each other — 2,105
-against 2,101 — which is what makes the rates comparable at all. AssemblyAI
+runs. The two reference lengths land within four tokens of each other, 2,105
+against 2,101, which is what makes the rates comparable at all. AssemblyAI
 makes roughly a quarter as many errors.
 
 ### The number that was wrong, and why it matters
 
 The original analysis reported **0.61%** for AssemblyAI. That figure came from
-taking the first 240 rows of each spreadsheet — but the two systems segment
+taking the first 240 rows of each spreadsheet, and the two systems segment
 differently. Whisper emits 797 segments for this recording where AssemblyAI emits
 316, so 240 rows of Whisper is 18.1 minutes of audio and 240 rows of AssemblyAI
-is 40.9 minutes — 2,100 reference tokens against 4,884.
+is 40.9 minutes: 2,100 reference tokens against 4,884.
 
 The annotation itself is sound and none of it was revisited. What differs is how
 far it runs: past the 18-minute mark Whisper has **no annotation at all** (0 of
 556 segments carry a marked error) while AssemblyAI was checked through to 38
 minutes. So AssemblyAI's extra 23 minutes are real, carefully verified,
-low-error audio that Whisper was simply never scored on — and averaging it in
+low-error audio that Whisper was never scored on at all, and averaging it in
 pulled AssemblyAI's rate down.
 
 Restricted to a shared window the answer is 0.81%, not 0.61%. AssemblyAI still
-wins comfortably, so the decision that came out of it stands — but the margin was
-overstated by a third. The fix is a summation rule, not a re-judgement:
-`compare()` in
+wins comfortably, so the decision that came out of it stands, though the margin
+was overstated by a third. What changed is a summation rule rather than a
+judgement: `compare()` in
 [`stt/wer.py`](src/emotion_timeline/stt/wer.py) now takes a time window rather
 than a row count, and a test asserts the row-count version is wrong, so the
 mistake cannot come back.
@@ -145,12 +145,12 @@ Full write-up: [`docs/dataset.md`](docs/dataset.md).
 
 ---
 
-## Result: which model family — and a benchmark withdrawn
+## Result: which model family, and a benchmark withdrawn
 
 Nine families were compared before a classifier was picked: logistic regression,
 naive Bayes, SVM, RNN, GRU, LSTM, MLP, DistilBERT and XLM-RoBERTa. Two records of
-that comparison survive — eight rows submitted by hand, and 101 runs the training
-script logged as it went — and they disagree about which family won.
+that comparison survive: eight rows submitted by hand, and 101 runs the training
+script logged as it went. They disagree about which family won.
 
 ![The two runs the conclusion rested on were never scored on the same data](assets/model-selection-evaluation-sets.png)
 
@@ -165,18 +165,18 @@ Neither log records an evaluation size, so it has to be recovered: an accuracy i
 whole correct over whole samples, so its fraction in lowest terms carries a
 divisor of the set it was measured on. The MLP's needs a multiple of **3,200** and
 DistilBERT's a multiple of **1,889**, which is prime. One evaluation set behind
-both would hold **6,044,800 samples** — fourteen times this project's entire
+both would hold **6,044,800 samples**, fourteen times this project's entire
 training set.
 
-It is not sampling noise either, and reaching for that would be the easy answer.
-The 95% Wilson intervals are [0.8530, 0.8767] and [0.7692, 0.8061] and they do
-not overlap. Something real separates the two runs; since they share no
+Sampling noise does not explain it either, tempting as that would be. The 95%
+Wilson intervals are [0.8530, 0.8767] and [0.7692, 0.8061] and they do not
+overlap. Something real separates the two runs; since they share no
 evaluation set, it is what they were scored on.
 
 Two more things fall out of the same two files:
 
 - **A sixth of the benchmark is models that learned nothing.** Predict one class
-  for every input and both F1 scores follow from the accuracy alone — 57 correct
+  for every input and both F1 scores follow from the accuracy alone: 57 correct
   of 112 gives macro F1 114/1183 = 0.096365173 exactly. **17 of the 101 runs**
   match that closed form to all nine decimal places they were logged with, and
   twelve of them share one triple of scores across naive Bayes, an LSTM, an RNN
@@ -207,9 +207,10 @@ DistilBERT evaluated multi-label.
 ![Disgust is found nine times in ten and wrong four times in ten](assets/model-class-scores.png)
 
 **What holds up.** Every figure in all three of the card's evaluation tables
-reproduces — each per-class F1 is the harmonic mean of its own precision and
-recall, each macro average the plain mean of its column, accuracy and weighted F1
-from the support column. Eighteen class rows, three tables, four decimal places.
+reproduces. Each per-class F1 is the harmonic mean of its own precision and
+recall, each macro average the plain mean of its column, and accuracy and
+weighted F1 come from the support column. Eighteen class rows, three tables, four
+decimal places.
 The in-domain result of **89.95% accuracy / 0.8127 macro F1** stands on its own
 arithmetic, and its support column is 15% of the dataset build, class by class.
 
@@ -221,26 +222,26 @@ uv run emotion-timeline model
 and accuracy are the same quantity; the card reports both as 0.8995. The script
 reports micro F1 0.8724 against subset accuracy 0.8279, which single-label
 evaluation cannot produce. And solving the script's hamming loss for the average
-true labels per sample gives **1.025** — so it trained on the pre-collapse
-multi-label file, not the single-label dataset the card names. The one tokenizer
+true labels per sample gives **1.025**, so it trained on the pre-collapse
+multi-label file rather than the single-label dataset the card names. The one tokenizer
 that survived the run holds **30,522 WordPiece tokens**, exactly DistilBERT's;
 the card claims 128,100 SentencePiece, which is DeBERTa-V2's.
 
 **The card's dataset table has its labels on the wrong rows.** The counts are
-right — they are the state this repository's build passes through before the
-priority collapse — but four of seven labels are shifted. Joy's 149,321 rows are
+right; they are the state this repository's build passes through before the
+priority collapse. Four of the seven labels are shifted. Joy's 149,321 rows are
 called Neutral; Neutral's 13,401 are called Fear. The card refutes itself: its
 own support column gives Neutral 2,010, which is 15% of 13,401 and not of
 149,321.
 
 That is not cosmetic. The card's limitations section reasons from the broken
-table and concludes the data is *"skewed toward neutral"* — Neutral is the
+table and concludes the data is *"skewed toward neutral"*. Neutral is the
 **smallest** class at 3.1%, and the one the model is worst at. The error
 diagnosis inverts the actual problem, and the plan this rebuild was written from
 quoted the same broken distribution.
 
 **The stress test cannot be read as a robustness result.** Its macro average
-divides by six, not seven — Surprise is missing from the table. Its control group
+divides by six rather than seven, because Surprise is missing from the table. Its control group
 is *harder* than three of the categories built to break the model: control
 0.3147 against emoji-heavy 0.7273 and typos 0.7287. And the headline 31.44% is
 just the control's own score, because the control is 3,502 of the 5,000 samples.
@@ -279,7 +280,7 @@ The card reports 0.8995 and 0.8127 over its own 64,250.
 
 **Accuracy up, macro F1 down, and the whole of the difference is Disgust.** Macro
 averaging weights it like Joy, and 9,151 of the card's 14,316 Disgust rows are the
-synthetic file that did not survive — 64% of the class. So no Disgust comparison
+synthetic file that did not survive, which is 64% of the class. So no Disgust comparison
 is published, and that is enforced in code rather than footnoted: the command
 prints a reason where the number would go, and a test asserts it never prints one.
 
@@ -315,11 +316,11 @@ Full chapter: [`docs/fine-tune.md`](docs/fine-tune.md).
 
 ---
 
-## Result: Russian, translated or native — and what translation costs
+## Result: Russian, translated or native, and what translation costs
 
 The pipeline reads Russian; everything else here trains on English. The original
-resolved that by judgement — no good Russian dataset, so translate — and never
-scored the decision.
+settled it by judgement: no good Russian dataset, so translate. The decision was
+never scored.
 
 ```bash
 uv run emotion-timeline russian            # reads only committed records
@@ -340,15 +341,15 @@ uv run emotion-timeline translation-cost   # prices translation on its own
 | | **agreement filter** | **0.5718** | **44.6%** |
 
 **On this corpus a native model wins by eleven points**, and beats the model the
-pipeline shipped — which was itself trained on this corpus, making its 0.4538 an
-upper bound rather than a measurement.
+pipeline shipped. That one was itself trained on this corpus, which makes its
+0.4538 an upper bound rather than a measurement.
 
 **Combining two models does not raise accuracy.** Both full-coverage rules land
 below the stronger model alone. That is the answer to the cross-validation the
 original marked "future" and never built. Where it pays is as a *filter*: on the
-44.6% of rows where the two agree, accuracy is 0.5718 — nine points above either
-alone. Not a better classifier; a believe-this / look-at-that signal, which is
-what the timeline uses.
+44.6% of rows where the two agree, accuracy is 0.5718, nine points above either
+alone. That is a believe-this / look-at-that signal rather than a better
+classifier, and it is what the timeline uses it for.
 
 **Then: what does translation actually cost?** The comparison above cannot say,
 because A's number carries translation *and* domain *and* one annotator's
@@ -362,16 +363,17 @@ round-tripped English → Russian → English, holding everything else fixed:
 | after `NLLB-600M` round trip | 0.5750 |
 
 **Translation costs this classifier a third of its accuracy**, and a translator six
-times the size recovers 0.0270 of the 0.3700 — seven per cent of the loss. On the
-Russian set the two engines are a single standard error apart, while the gap to
-the native model is nine and a half. The surface markers the model leans on
-survive intact, so that is not the mechanism either. A meaning-preserving rewrite destroys most of what 0.9164 was measuring,
-which says more about the classifier than about translation.
+times the size recovers 0.0270 of the 0.3700, which is seven per cent of the
+loss. On the Russian set the two engines are a single standard error apart, while
+the gap to the native model is nine and a half. The surface markers the model
+leans on survive intact, so that is not the mechanism either. A meaning-preserving
+rewrite destroys most of what 0.9164 was measuring, which says more about the
+classifier than about translation.
 
 > **An audit corrected this chapter.** It previously reported A at 0.3631 and
 > concluded the coursework's judgement to translate was wrong. The translation
-> harness was dropping sentences — `opus-mt` is sentence-level, and **88% of
-> multi-sentence rows came back short** — and the conclusion reached further than
+> harness was dropping sentences: `opus-mt` is sentence-level, and **88% of
+> multi-sentence rows came back short**. The conclusion also reached further than
 > the evidence. ru-izard is *DeepL-translated GoEmotions*, so it makes the
 > translated approach translate twice and lets the native one train on its own
 > test distribution. The ranking survives; the recommendation does not.
@@ -382,10 +384,10 @@ Full chapter: [`docs/russian.md`](docs/russian.md).
 
 ## Result: valence and arousal, measured before being shown
 
-The original ran a second model for "intensity" and never scored it. It is a real
-one — [Mendes & Martins, ECIR 2023](https://arxiv.org/abs/2302.14021), 100
-languages, reads Russian without translation — so scoring it needed no new data,
-just the labels this project already has.
+The original ran a second model for "intensity" and never scored it. It is a good
+one: [Mendes & Martins, ECIR 2023](https://arxiv.org/abs/2302.14021), 100
+languages, and it reads Russian without translation. Scoring it needed no new
+data, just the labels this project already has.
 
 ```bash
 uv run emotion-timeline valence
@@ -396,13 +398,13 @@ uv run emotion-timeline valence
 | **Valence** | Joy over Anger/Disgust/Fear/Sadness | **0.8223** |
 | **Arousal** | Anger/Fear/Surprise over Sadness/Neutral | 0.5734 |
 
-**Valence works; arousal barely does** — and arousal is the one the original used.
+**Valence works; arousal barely does**, and arousal is the one the original used.
 Its five intensity levels turn out to be three: the outer two hold 8.7% of the
 data between them.
 
 **Neither improves the emotion label.** Stacked on both classifiers and fitted on
-validation, the two dimensions move the test score by ten rows in 3,715 —
-54 right, 44 wrong, p = 0.3634. Two tie-break rules built on the idea come out
+validation, the two dimensions move the test score by ten rows in 3,715: 54
+right, 44 wrong, p = 0.3634. Two tie-break rules built on the idea come out
 measurably *worse* than doing nothing.
 
 **So it is display-only, and off by default.** What earns it a place at all is
@@ -417,7 +419,7 @@ Full chapter: [`docs/valence.md`](docs/valence.md).
 
 ## Result: the pipeline, on a real recording
 
-Three columns — `start_s`, `end_s`, text — are the whole interface. Above them,
+Three columns are the whole interface: `start_s`, `end_s` and text. Above them,
 optional: yt-dlp, ffmpeg, Whisper large-v3-turbo. Below them, reproducible with
 no network at all.
 
@@ -437,15 +439,15 @@ uv run emotion-timeline serve     # or the same pipeline in a browser, --extra w
 **One model answers; the other is asked anyway.** No combination rule beat the
 native Russian model alone, so the timeline does not use one. The translation path
 still runs and its answer rides along, because the *agreement* between them was
-worth 0.5604 against 0.4816 — a where-to-look signal rather than a better
-classifier, and drawn as one.
+worth 0.5604 against 0.4816. That is a where-to-look signal rather than a better
+classifier, and it is drawn as one.
 
 **Just over half a documentary is Neutral, which is the correct answer.** The 21
 scenes that are not land where the episode turns: Disgust walking away from a
 murder scene at 6.1 minutes, Fear at 16.4 on *"I understood why they will not talk
-about it"*, and the episode's most confident non-Neutral reading at 49.5 —
-*"thank you for the interview, for the courage, for the candour"*, 0.7691, both
-models agreeing.
+about it"*, and the episode's most confident non-Neutral reading at 49.5 on
+*"thank you for the interview, for the courage, for the candour"*, at 0.7691,
+with both models agreeing.
 
 **Then the same recording was run through a second transcriber, and 38% of the
 timeline moved.** Whisper large-v3-turbo instead of AssemblyAI: same models, same
@@ -457,8 +459,8 @@ and both timelines are committed so it recomputes.
 It also found a real defect first time round. Classifying whatever rows the
 transcriber emitted made the Whisper run **87% Neutral against AssemblyAI's 68%**,
 because Whisper splits on pauses where AssemblyAI merges into paragraphs. The unit
-is now a fixed 400-character chunk — sized so neither model truncates — which is
-one reason for the gap removed, not the gap.
+is now a fixed 400-character chunk, sized so neither model truncates. That removes
+one reason for the gap without removing the gap.
 
 **None of this is an accuracy.** The recording has no labels and never will have.
 36.2% is consistency between two models, 62.0% consistency between two
@@ -482,13 +484,13 @@ the 6,454 failures.
 | Fear | 24.87% | 8,003 |
 | Surprise | 22.68% | 2,372 |
 
-Difficulty mostly tracks rarity — except Fear, which fails a quarter of the time
-on the third-largest class in the set. Its errors scatter across four
-neighbouring emotions rather than concentrating on one, which is what genuine
-ambiguity looks like as opposed to a shortage of data.
+Difficulty mostly tracks rarity. The exception is Fear, which fails a quarter of
+the time on the third-largest class in the set. Its errors scatter across four
+neighbouring emotions instead of concentrating on one, which looks like genuine
+ambiguity rather than a shortage of data.
 
 Confidence separates cleanly on average, 0.887 when right against 0.428 when
-wrong, but **625 errors are made confidently** — 9.7% of them, and precisely the
+wrong, but **625 errors are made confidently**, 9.7% of them, and precisely the
 ones a confidence threshold will never catch.
 
 ### The markers that make it worse
@@ -512,8 +514,8 @@ The 64,250 per-sample predictions were not kept, so the charts are rendered from
 a committed summary rather than recomputed. That is weaker, so everything that
 can be cross-checked is: supports sum, errors sum, every rate matches its own
 numerator and denominator, and `emotion-timeline figures` refuses to draw
-anything if they do not. The strongest check is external — the model card written
-separately for the same split records per-class *recall* where this records
+anything if they do not. The strongest check is external. The model card, written
+separately for the same split, records per-class *recall* where this records
 per-class *error rate*, and the two agree to four decimal places across all seven
 classes.
 
@@ -547,7 +549,7 @@ uv sync --extra dev --extra web
 uv run pytest
 ```
 
-The core install is deliberately light — numpy, pandas, matplotlib, scipy. Nothing
+The core install is deliberately light: numpy, pandas, matplotlib, scipy. Nothing
 that needs a GPU or a paid API key is a required dependency, so reading the
 results costs a few seconds rather than a torch download. The heavier pieces are
 extras: `--extra data` to rebuild the training set from source, `--extra model`
@@ -559,7 +561,8 @@ pip works too: `pip install -e ".[dev]"`.
 `emotion-timeline --help` groups the twenty-one commands by chapter, and every
 command's own `--help` leads with examples and prints the default for every flag.
 Two conventions hold across all of them: a command named for reading a record
-reads it, and the ones that recompute say so — `--write`, `--rescore`, `--verify`.
+reads it, and the ones that recompute say so with `--write`, `--rescore` or
+`--verify`.
 When something fails you get a sentence; `--debug` (or `EMOTION_TIMELINE_DEBUG=1`)
 turns that back into a traceback.
 
@@ -571,16 +574,16 @@ uv run pre-commit install --install-hooks -t pre-commit -t pre-push
 
 That is the whole setup. Formatting, linting, strict type checking and the guard
 against committing client material or model weights then run before a commit
-exists, and the test suite runs before a push. CI enforces the same set — its
-lint job *is* `pre-commit run --all-files` — so a green commit hook means a green
-pull request.
+exists, and the test suite runs before a push. CI enforces the same set, since
+its lint job *is* `pre-commit run --all-files`, so a green commit hook means a
+green pull request.
 
 ### Credentials
 
 There are none to configure. The source corpus is public and ungated and every
 published number derives from files under `benchmarks/`, so the whole study
-reproduces with no account anywhere — a test asserts it, running each command
-with the environment stripped.
+reproduces with no account anywhere. A test asserts it, running each command with
+the environment stripped.
 
 For the stages that will call a hosted service, keys come from the environment
 or a gitignored `.env`; `cp .env.example .env` and fill in what you need. An
@@ -642,7 +645,7 @@ numbers from a command, and ends its chapter by saying what it does not establis
 
 **Still open.** The nine families rerun on one feature pipeline and one held-out
 split, which is the only thing that would repair the ranking withdrawn above. And
-a Russian emotion corpus that is not translated social-media text — the one
+a Russian emotion corpus that is not translated social-media text: the one
 experiment every number in the Russian chapter is waiting on, and the one that
 cannot be run, because 24,766 rows is what exists.
 
@@ -670,8 +673,8 @@ cannot be run, because 24,766 rows is what exists.
   carries the container;
   [DSL-Learning](https://github.com/alex-krasnoshtanov/DSL-Learning) carries the
   mkdocs site. This repository is the study, and it installs in a few seconds.
-  There *is* a browser front end now — `emotion-timeline serve` — but it is a
-  local tool behind an optional extra, not a deployed demo.
+  There *is* a browser front end now, `emotion-timeline serve`, but it is a local
+  tool behind an optional extra rather than a deployed demo.
 
 ---
 
@@ -686,12 +689,12 @@ first. The original group repository was a five-person effort:
 | The valence–arousal checkpoint (mirrored, not trained here) | [Mendes & Martins](https://arxiv.org/abs/2302.14021), MIT |
 | Dataset construction, error analysis, the speech-to-text comparison | Oleksii Krasnoshtanov |
 | Nine-family model comparison and its iteration log | Danil Sysenko |
-| Explainability analysis — attribution and masking | Filipp Lotsmanov |
+| Explainability analysis (attribution and masking) | Filipp Lotsmanov |
 | Prompted-LLM baseline and prompt engineering | the group |
 
 Everything in this repository is rewritten rather than copied, and the numbers are
 re-derived rather than quoted. That is how the speech-to-text discrepancy above
-came to light, and how the model-selection ranking came to be withdrawn — both
+came to light, and how the model-selection ranking came to be withdrawn. Both
 findings are about the records rather than about the people who kept them, and
 neither would have surfaced from quoting the figures forward.
 
@@ -699,7 +702,7 @@ neither would have surfaced from quoting the figures forward.
 
 ## Licence
 
-MIT — see [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE).
 
 The training set is rebuilt from one third-party corpus, which carries its own
 terms: [cirimus/super-emotion](https://huggingface.co/datasets/cirimus/super-emotion).
@@ -713,5 +716,5 @@ the dataset is rebuilt from source.
 
 ## Author
 
-**Oleksii Krasnoshtanov** — [GitHub](https://github.com/alex-krasnoshtanov) ·
+**Oleksii Krasnoshtanov** · [GitHub](https://github.com/alex-krasnoshtanov) ·
 [LinkedIn](https://www.linkedin.com/in/oleksii-krasnoshtanov/)

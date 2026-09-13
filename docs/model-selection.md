@@ -21,8 +21,8 @@ uv run emotion-timeline models      # the audit, from both records
 
 Both are committed under `benchmarks/model-selection/`. The run log is the
 original file byte for byte; the submitted log is transcribed out of a
-spreadsheet, because a binary workbook cannot be read in a diff — its
-`_comment` key lists which of its fields are copied and which two are derived.
+spreadsheet, because a binary workbook cannot be read in a diff. Its `_comment`
+key lists which of its fields are copied and which two are derived.
 
 Neither can be rerun. The runs are gone, and the dataset behind the earliest
 third of them is client material that stays out of this repository. So almost
@@ -60,8 +60,7 @@ The GRU is sixth on the reported column and third on the one recorded beside it.
 The linear SVC is fifth on the first and second-worst on the second. Nothing
 about either model changed; the two averages disagree because macro averaging
 gives the rare classes the same weight as Joy, and these models are worse on the
-rare classes — which
-[`error-analysis.md`](error-analysis.md) measures directly.
+rare classes, which [`error-analysis.md`](error-analysis.md) measures directly.
 
 The top two do not move, so "a transformer won" survives either choice. Anything
 below that is an artefact of which column was read.
@@ -69,8 +68,8 @@ below that is an artefact of which column was read.
 **How we know which average the reported column is.** The spreadsheet labels its
 columns plainly `Precision`, `Recall` and `F1 score` and never says. Recall
 averaged over classes weighted by their support is the share of all samples got
-right, which is accuracy — an identity that holds for weighted averaging and
-fails for macro. Recall equals accuracy in all eight rows, to four decimal
+right, which is accuracy. That identity holds for weighted averaging and fails
+for macro. Recall equals accuracy in all eight rows, to four decimal
 places, which settles it. `check_consistency` asserts that identity, because the
 whole finding above depends on the answer.
 
@@ -85,11 +84,11 @@ classify, and it is not the same figure for all eight:
 | 6,000 | lstm, gru, distilbert, distilroberta |
 
 The four classical models were given nearly twice as much Neutral as the four
-neural ones. Neutral is the class this model family is worst at — a 36.8% error
-rate in the error analysis, the worst of the seven — so the share of it in the
+neural ones. Neutral is the class this model family is worst at, with a 36.8% error
+rate in the error analysis, the worst of the seven. So the share of it in the
 evaluation set moves the score, and it moved in the transformers' favour. How far
-is not recoverable, which is the point: the margin at the top of the table cannot
-be quantified, so it cannot be defended.
+is not recoverable, and that is what matters here: the margin at the top of the
+table cannot be quantified, so it cannot be defended.
 
 ## The automatic log
 
@@ -112,7 +111,7 @@ The recovery is deliberately conservative in two ways.
   multiple cannot share an evaluation set whatever the true sizes were.
 - It **declines** on the 22 rows the log rounded to fewer than seven decimal
   places, 17 of them to exactly four. At that precision the fraction is
-  unrecoverable rather than merely imprecise — 0.2796 reads as 699/2500, and
+  unrecoverable rather than merely imprecise: 0.2796 reads as 699/2500, and
   2,500 is not a set anybody scored.
 
 That leaves 79 of the 101 runs placeable, and they recover **27 distinct
@@ -130,7 +129,7 @@ weighting multiplies by *k/n*. No property of the model appears anywhere in it.
 
 For 57 correct out of 112 that gives macro F1 114/1183 = **0.096365173** and
 weighted F1 **0.34330093**. Twelve rows of the log carry exactly those two
-numbers, to all nine decimal places they were written with — across naive Bayes,
+numbers, to all nine decimal places they were written with, across naive Bayes,
 an LSTM, an RNN and XLM-RoBERTa. Four architectures cannot agree to nine
 decimals unless they made identical predictions, and the closed form says which
 predictions those were: one class, every time.
@@ -148,10 +147,10 @@ Sorting the log and reading off the top gives the conclusion the coursework drew
 | Best overall | `pytorch_mlp_gpu` | 0.8219 | "external data only" | a multiple of 3,200 |
 | Best transformer | `distilbert` | 0.7515 | "balanced data" | a multiple of 1,889 |
 
-A hand-engineered network beating a transformer by seven points is a good
-finding, and it is not what these two rows are. They were never scored on the
-same data. 1,889 is prime, so a single evaluation set behind both would need
-**6,044,800 samples** — fourteen times the 428,331-row training set this study
+A hand-engineered network beating a transformer by seven points would be a good
+finding. That is not what these two rows show: they were never scored on the same
+data. 1,889 is prime, so a single evaluation set behind both would need
+**6,044,800 samples**, fourteen times the 428,331-row training set this study
 builds, from a project whose largest recorded evaluation was a few thousand rows.
 
 ![The two runs the conclusion rested on were never scored on the same data](../assets/model-selection-evaluation-sets.png)
@@ -177,16 +176,16 @@ score belongs to a logistic regression.
 ## Provenance
 
 `Task6` in the group repository originates with **Danil Sysenko**. The logs are
-his; the audit, the arithmetic and this chapter are not, and no number here is
-quoted forward from his write-up — every one is recomputed or cross-checked from
-the two committed files, which is the practice that produced the findings above.
+his; the audit, the arithmetic and this chapter are not. No number here is quoted
+forward from his write-up: every one is recomputed or cross-checked from the two
+committed files, which is the practice that produced the findings above.
 
 The earliest runs were scored against `data/raw/balanced_dataset.xlsx`, named in
 the original `src/config.py`. That file holds labelled transcripts supplied by the
 Content Intelligence Agency, so it is not committed here and those runs cannot be
 reproduced by anyone. The log's notes column first mentions external data at
 iteration 48, and every placeable run before it recovers a divisor of either 112
-or 93 — an evaluation set of roughly a hundred rows across seven classes, which
+or 93, so an evaluation set of roughly a hundred rows across seven classes, which
 is why so many of them collapsed onto a single answer. After iteration 48 that
 stops being true: the divisors climb into the thousands and only one of them,
 28, still divides either number.
@@ -203,7 +202,7 @@ stops being true: the divisors climb into the thousands and only one of them,
   whose Neutral share differed between the two halves of the table. It points
   the right way and it settles nothing.
 - **That the MLP result was wrong.** Its accuracy interval is real and it does
-  not overlap the transformer's. What is wrong is the comparison, and the honest
+  not overlap the transformer's. What is wrong is the comparison. The likeliest
   reading is that the MLP was scored on an easier evaluation set whose difficulty
   nobody recorded.
 - **That any of these numbers describes the published model.** None of them does.

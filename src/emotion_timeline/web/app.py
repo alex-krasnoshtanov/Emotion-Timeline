@@ -78,7 +78,7 @@ def validate_url(raw: str) -> str:
     if parsed.scheme not in ("http", "https"):
         raise ValueError("only http and https links are accepted")
     if not parsed.netloc:
-        raise ValueError(f"that does not look like a link: {candidate[:80]}")
+        raise ValueError(f"that does not look like a web address: {candidate[:80]}")
     return candidate
 
 
@@ -198,10 +198,9 @@ def build_app(downloads: str | Path = "downloads", store: JobStore | None = None
                 # the page may never look at, so it is said here as well.
                 "ffmpeg_available": shutil.which("ffmpeg") is not None,
                 "valence_note": (
-                    "Valence and arousal, from a published multilingual model. "
-                    "Measured on held-out Russian to add nothing to the emotion "
-                    "label, so it is shown beside the label and never used to "
-                    "pick it."
+                    "Valence and arousal from a published multilingual model. On "
+                    "held-out Russian they made no difference to the emotion label, "
+                    "so they appear alongside it and never decide it."
                 ),
             }
         )
@@ -222,7 +221,7 @@ def build_app(downloads: str | Path = "downloads", store: JobStore | None = None
     ) -> JSONResponse:
         has_file = file is not None and bool(file.filename)
         if has_file == bool(url.strip()):
-            raise HTTPException(400, "give either a link or a file, not both and not neither")
+            raise HTTPException(400, "give either a link or a file, and only one of them")
 
         if valence and not VA_CHECKPOINT.exists():
             # Before the upload is streamed to disk: `run_job` owns the only
@@ -256,7 +255,10 @@ def build_app(downloads: str | Path = "downloads", store: JobStore | None = None
                     written += len(chunk)
                     if written > MAX_UPLOAD_BYTES:
                         upload.unlink(missing_ok=True)
-                        raise HTTPException(413, "that file is larger than this accepts")
+                        raise HTTPException(
+                            413,
+                            f"that file is over the {MAX_UPLOAD_BYTES / 1e6:.0f} MB limit",
+                        )
                     handle.write(chunk)
             source = file.filename or upload.name
 
@@ -282,7 +284,7 @@ def build_app(downloads: str | Path = "downloads", store: JobStore | None = None
         if job is None:
             raise HTTPException(404, "no such job; the server may have restarted")
         if not job.stop():
-            raise HTTPException(409, f"that run had already {job.state.value}")
+            raise HTTPException(409, f"that run was already {job.state.value}")
         return JSONResponse(job.summary())
 
     @app.get("/api/jobs/{job_id}/timeline")
@@ -291,7 +293,7 @@ def build_app(downloads: str | Path = "downloads", store: JobStore | None = None
         if job is None:
             raise HTTPException(404, "no such job; the server may have restarted")
         if job.result is None:
-            raise HTTPException(409, f"that run is {job.state.value}, not finished")
+            raise HTTPException(409, f"that run has no result yet; it is {job.state.value}")
         return JSONResponse(job.result)
 
     return app

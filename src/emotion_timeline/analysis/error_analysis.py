@@ -266,7 +266,7 @@ def figure_class_difficulty(report: ErrorReport, path: Path) -> Path:
     ax.set_xlim(0, max(rates) * 1.35)
     ax.set_xlabel("error rate (%)", color=MUTED, fontsize=9)
     ax.set_title(
-        f"Class difficulty is not uniform — {report.total_errors:,} errors "
+        f"Class difficulty is not uniform: {report.total_errors:,} errors "
         f"in {report.total_samples:,} samples",
         color=INK,
         fontsize=12,
@@ -310,7 +310,7 @@ def figure_confidence(report: ErrorReport, path: Path) -> Path:
     n = report.confidence["high_confidence_errors"]
     share = report.confidence["high_confidence_error_share_of_errors"] * 100
     ax.set_title(
-        f"A wide confidence gap — but {n} errors ({share:.1f}%) are confident anyway",
+        f"A wide confidence gap, but {n} errors ({share:.1f}%) are confident anyway",
         color=INK,
         fontsize=12,
         weight="bold",

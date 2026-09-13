@@ -34,14 +34,14 @@
     "valence_auc": 0.8223,
     "arousal_auc": 0.5734,
     "improves_the_label": false,
-    "caveat": "display only: measured on held-out Russian to add nothing to the emotion label, and never validated on documentary speech"
+    "caveat": "shown for reference only. On held-out Russian these scores made no difference to the emotion label, and they have never been checked against documentary speech"
   },
   "agreement": {
     "scenes": 17,
     "share": 0.3617,
     "held_out_accuracy_where_they_agreed": 0.5718,
     "measured_on": "the held-out ru-izard split, which is social-media register",
-    "caveat": "agreement here is a consistency signal, not an accuracy: this recording has no labels, and two models can agree and both be wrong"
+    "caveat": "this recording has no labels, so agreement only shows where the two models are consistent. They can agree and both still be wrong"
   },
   "timeline": [
     {

@@ -2,10 +2,10 @@
 
 Every other chapter here measures something against ground truth. This one cannot:
 a 51-minute documentary about Manaus and the Brazil–Colombia border has no labels,
-and nobody is going to annotate it. So the question it can answer is not *how
-accurate is this* — unanswerable — but **how much of this timeline is the
-recording, and how much is the machinery**. That turns out to be measurable
-without a single label, and the answer is less flattering than the picture.
+and nobody is going to annotate it. *How accurate is this* has no answer here.
+What it can answer is **how much of this timeline is the recording and how much
+is the machinery**, and that turns out to be measurable without a single label.
+The answer is less flattering than the picture.
 
 ```bash
 uv run emotion-timeline timeline --against benchmarks/pipeline/timeline-whisper.json
@@ -45,27 +45,27 @@ segments with less than one second of silence between them are one scene. That
 gives 47 scenes with a median length of 51 seconds; two seconds gives 31 at 83
 seconds, and five gives ten, which is a chapter list rather than a timeline. The
 threshold is one flag, it is recorded, and a reader can check it against the
-transcript by eye — three things PySceneDetect was not.
+transcript by eye. PySceneDetect offered none of those.
 
 **Intensity was the original's second model, and it has now been scored.** That
-model is real — [Mendes & Martins, ECIR 2023](https://arxiv.org/abs/2302.14021),
-multilingual, reads Russian without translation — but its output was never checked
-against anything, and its arousal dimension was cut into five "intensity levels"
-at 0.2/0.4/0.6/0.8 on no evidence. [`valence.md`](valence.md) scores both
+model is a good one: [Mendes & Martins, ECIR 2023](https://arxiv.org/abs/2302.14021),
+multilingual, and it reads Russian without translation. Its output was never
+checked against anything, though, and its arousal dimension was cut into five
+"intensity levels" at 0.2/0.4/0.6/0.8 on no evidence. [`valence.md`](valence.md) scores both
 dimensions on held-out Russian and finds the split verdict: **valence separates
 the classes at AUC 0.8223, arousal at 0.5734**, so the original built its scale on
 the weaker of the two. The five levels turn out to be three; the outer two hold
 8.7% of the data.
 
-The strip under this timeline is therefore still **calibrated confidence** — how
-sure the classifier is, which is a different quantity from how energetic the
-speech is, and the one that can be checked. Neither dimension improves the emotion
-label (p = 0.3634), so neither is allowed near the prediction.
+The strip under this timeline is therefore still **calibrated confidence**: how
+sure the classifier is. That is a different quantity from how energetic the
+speech is, and it is the one that can be checked. Neither dimension improves the
+emotion label (p = 0.3634), so neither is allowed near the prediction.
 
 **The valence band above it is display-only and off by default.** It earns its
 place by disagreeing with the label where the label says least: 26 of these 47
 scenes are called Neutral, and those 26 span **91% of the whole episode's valence
-range** — 0.154 at the favelas, 0.824 after the border crossing. Turn it on with
+range**, from 0.154 at the favelas to 0.824 after the border crossing. Turn it on with
 `--valence`, or the checkbox in the browser.
 
 **Translation is a pinned artefact.** `Helsinki-NLP/opus-mt-ru-en`, greedy
@@ -79,7 +79,7 @@ the page.
 
 Ask the models about whatever rows the transcriber emitted, and part of every
 answer is the transcriber. The same recording through Whisper rather than
-AssemblyAI came back **87% Neutral against 68%** — Whisper splits on pauses where
+AssemblyAI came back **87% Neutral against 68%**. Whisper splits on pauses where
 AssemblyAI merges into paragraphs, and a lone sentence reads as neutral where the
 paragraph it came from does not.
 
@@ -90,8 +90,8 @@ corpus's worst observed rate ruBERT spends 0.298 tokens per character, so 400
 characters is 119 of its 128 and 140 of the translator's 192, and **nothing is
 truncated**. 316 segments become 142 chunks; Whisper's 947 become 132.
 
-**It did not make the two transcripts agree**, which is the honest half. It
-removes one known reason for them not to.
+**It did not make the two transcripts agree.** All it does is remove one known
+reason for them not to.
 
 ## How much of this is the transcriber?
 
@@ -106,8 +106,8 @@ Two transcripts of the same 51 minutes, the same pipeline over both:
 | The two models agree | 36.2% | 33.3% |
 
 **They put the same emotion on 62.0% of the 2,740 seconds both cover.** Not 95%,
-and not noise either. Two-thirds of the disagreement is one-directional —
-AssemblyAI Neutral where Whisper is not — and the largest single move is 274
+and not noise either. Two-thirds of the disagreement runs one way, with
+AssemblyAI Neutral where Whisper is not, and the largest single move is 274
 seconds of Neutral becoming Fear.
 
 That is a number no accuracy figure would have shown, it needed no labels, and it
@@ -140,9 +140,9 @@ scenes that are not Neutral land where the episode turns:
 | 51.3m | **Surprise** | 0.6585 | | *"an interesting day. Busy. And now I can finally relax"* |
 
 The 49.5-minute scene is the most confident non-Neutral reading in the episode and
-both models agree on it. So are the two *least* confident, at 0.2297 and 0.2370 —
-which is the clearest reminder available that agreement is not confidence, and
-that neither is accuracy.
+both models agree on it. So are the two *least* confident, at 0.2297 and 0.2370,
+which is a useful reminder that agreement and confidence are different things,
+and that neither of them is accuracy.
 
 **One is plainly wrong**, and it is worth naming: at 37.6 minutes *"oh, brilliant!
 And they are handing out sweets!"* comes back **Anger**. The two models split on
@@ -153,8 +153,8 @@ opinion at all.
 
 A predicts **Disgust on 24 of 47 scenes**; B predicts it on 4. On a recording
 about drug trafficking Disgust is not an absurd answer, but half the episode is
-not a reading of the material — it is a systematic lean, from the model that
-scored 0.3728 on ru-izard against B's 0.4816.
+too much to be a reading of the material. It is a systematic lean, from the model
+that scored 0.3728 on ru-izard against B's 0.4816.
 
 The lean got **worse** when the translator was fixed. An audit found `opus-mt` was
 dropping sentences ([`russian.md`](russian.md) has the numbers), and with whole
@@ -183,8 +183,8 @@ than it saves.
 | Whisper, `vad_filter=True` | 947 | 41.1 min | **44.4s** |
 | Whisper, `--no-vad` | 913 | 41.8 min | 25.3s |
 
-The 44-second gap is the episode's opening narration — *"Манаус, самый большой
-мегаполис Северной Бразилии…"* — delivered over a music bed. The detector hears
+The 44-second gap is the episode's opening narration, *"Манаус, самый большой
+мегаполис Северной Бразилии…"*, delivered over a music bed. The detector hears
 music and drops the voice with it. AssemblyAI transcribes the paragraph;
 `--no-vad` recovers most of it.
 
@@ -230,19 +230,19 @@ uv run emotion-timeline serve            # http://127.0.0.1:8000
 
 A link or a file goes in the box, the page polls while Whisper and the two
 classifiers work, and the timeline comes back with the transcript beside it. It
-is the same code the commands run — `pipeline/score.py` is called by both, so the
+is the same code the commands run: `pipeline/score.py` is called by both, so the
 page and `timeline.csv` cannot drift apart.
 
 **It opens on a timeline rather than an empty form.** The committed 47-scene
-example is drawn on load, with no GPU, no network and nothing downloaded — which
-is also what makes the interface testable: `tests/test_web.py` exercises every
-route without a model on the machine. What is on screen always names itself, so
-the example cannot be read as a run of your own.
+example is drawn on load, with no GPU, no network and nothing downloaded. That is
+also what makes the interface testable: `tests/test_web.py` exercises every route
+without a model on the machine. What is on screen always names itself, so the
+example cannot be read as a run of your own.
 
 **A run is something you can watch and stop.** Three named stages, the elapsed
 time measured on the server, and a button that stops it. Cancellation lands on
-the progress callback, because there is no polite place to return from inside
-one long call into faster-whisper — so a stopped run unwinds at its next line of
+the progress callback, because there is no polite place to return from inside one
+long call into faster-whisper, so a stopped run unwinds at its next line of
 output rather than ten minutes later. The job id goes in the URL, so reloading at
 minute eight reattaches to the run instead of losing it, and if the server goes
 away the page says so rather than sitting on its last state for ever.
@@ -254,21 +254,21 @@ give you the output.
 **It binds to loopback, and that is not a default to change casually.** The page
 hands a URL to yt-dlp and a file to ffmpeg, so anyone who can reach the port can
 make this machine fetch a URL of their choosing. Three checks sit on that
-boundary — the link has to be `http`/`https`, the upload has to carry a media
-extension and stay under 512 MB, and the uploaded *filename is never used as a
-path*: the extension is taken and the name is generated. Each of those has a test
+boundary. The link has to be `http`/`https`; the upload has to carry a media
+extension and stay under 512 MB; and the uploaded *filename is never used as a
+path*, since the extension is taken and the name is generated. Each has a test
 named after the thing it refuses. The size limit is now checked in the browser as
 well, so a 600 MB file is refused before it is uploaded rather than after.
 
 The scene gap and the voice-activity filter are both on the page, because the
 [VAD finding](#the-voice-activity-filter-drops-narration-over-music) means the
-right setting depends on the recording. Whatever this checkout cannot do — no
-ffmpeg on PATH, no valence checkpoint downloaded — the page says so on load
-instead of failing at the end of a run.
+right setting depends on the recording. If this checkout is missing something,
+say ffmpeg on PATH or the valence checkpoint, the page says so on load instead of
+failing at the end of a run.
 
 ## What this does not establish
 
-- **Not an accuracy.** There are no labels on this recording. 36.2% is a
+- **None of this is an accuracy.** There are no labels on this recording. 36.2% is a
   consistency figure between two models, and 62.0% a consistency figure between
   two transcripts. Two models can agree and both be wrong, and on out-of-domain
   text they will do that more often than the ru-izard number suggests.
@@ -278,13 +278,13 @@ instead of failing at the end of a run.
 - **A is weaker here than the ru-izard table suggests, and B may be stronger.**
   ru-izard is DeepL-translated English, so it makes A translate twice and lets B
   train on its own test distribution. This recording is native Russian speech,
-  where neither handicap applies — so the 0.3728-against-0.4816 gap is not the
-  right prior for what these two are doing here. [`russian.md`](russian.md) says
+  where neither handicap applies, so the 0.3728-against-0.4816 gap is the wrong
+  prior for what these two are doing here. [`russian.md`](russian.md) says
   why, and nothing available measures the native case.
-- **The confidences are low, and that is the honest reading.** A median of 0.382
+- **The confidences are low, and that is what they mean.** A median of 0.382
   after calibration says the model is rarely sure on documentary speech. It is
   trained on social-media register and this is narration, and the temperature
-  itself was fitted on ru-izard — so even the calibration is borrowed.
+  itself was fitted on ru-izard, so even the calibration is borrowed.
 - **Two transcripts is not a distribution.** 62.0% is one pair. A third
   transcriber could sit anywhere, and the comparison also confounds the
   transcript with the scene boundaries, since the two do not pause in the same

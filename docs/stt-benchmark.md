@@ -5,9 +5,10 @@ Two systems transcribed the same 51-minute Russian-language documentary. Fluent
 speakers listened to the audio alongside each transcript and marked, per segment,
 how many words were **substituted**, **inserted** or **deleted**.
 
-That hand annotation is the ground truth here. There is no reference transcript
-in the data — nobody typed the audio out in full — so word error rate cannot be
-recovered by aligning two strings. It can only be recombined from the counts.
+That hand annotation is the ground truth here. Nobody typed the audio out in
+full, so there is no reference transcript to align against and word error rate
+cannot be recovered by comparing two strings. It can only be recombined from the
+counts.
 
 ## The arithmetic
 
@@ -36,9 +37,9 @@ Scored over the same 18.1 minutes. The two reference lengths land four tokens
 apart, which is the control that makes the rates comparable: both systems were
 scored on the same quantity of speech.
 
-AssemblyAI makes roughly a quarter as many errors, and its errors are milder —
-over half of Whisper's are deletions, which silently lose content rather than
-corrupt it.
+AssemblyAI makes roughly a quarter as many errors, and its errors are milder.
+Over half of Whisper's are deletions, which quietly lose content instead of
+corrupting it.
 
 ```bash
 uv run emotion-timeline wer --window 0:00-18:09
@@ -46,9 +47,9 @@ uv run emotion-timeline wer --window 0:00-18:09
 
 ## The correction
 
-The original analysis reported **0.61%** for AssemblyAI. That number is
-reproducible — scoring the first 240 rows still returns it — but it does not mean
-what it appears to.
+The original analysis reported **0.61%** for AssemblyAI. Scoring the first 240
+rows still returns it, so the number reproduces. It just does not mean what it
+looks like it means.
 
 It came from taking **the first 240 rows of each spreadsheet**. The two systems
 segment differently: Whisper emits 797 segments for this recording where
@@ -70,7 +71,7 @@ annotated for both systems:
 
 The annotators worked through the whole file for AssemblyAI and stopped at
 18 minutes for Whisper. So the extra 23 minutes inside AssemblyAI's 240 rows are
-real, carefully checked, low-error audio — for which Whisper has no score at all.
+real, carefully checked, low-error audio, and Whisper has no score for any of it.
 Averaging it in pulled AssemblyAI's rate from 0.81% down to 0.61%.
 
 Nothing was wrong with the annotation, and no judgement in it was revisited. The
@@ -93,7 +94,7 @@ version gives the wrong answer, so the mistake cannot come back quietly.
 
 ## What this does not establish
 
-- **One recording, one language, one domain** — a 51-minute Russian documentary
+- **One recording, one language, one domain.** A 51-minute Russian documentary
   with clear studio narration. Neither number is a general claim about either
   system.
 - **Annotation is human and single-pass.** No second annotator, so there is no
@@ -101,5 +102,5 @@ version gives the wrong answer, so the mistake cannot come back quietly.
 - **Whisper ran with anti-hallucination settings** tuned for this pipeline
   rather than at its defaults.
 
-The decision it supported — transcribe with AssemblyAI, keep Whisper as the
-offline fallback — sits well within what the evidence carries.
+It supported one decision: transcribe with AssemblyAI and keep Whisper as the
+offline fallback. That sits well within what the evidence carries.

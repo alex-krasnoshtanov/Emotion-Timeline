@@ -33,7 +33,7 @@
     "share": 0.3333,
     "held_out_accuracy_where_they_agreed": 0.5718,
     "measured_on": "the held-out ru-izard split, which is social-media register",
-    "caveat": "agreement here is a consistency signal, not an accuracy: this recording has no labels, and two models can agree and both be wrong"
+    "caveat": "this recording has no labels, so agreement only shows where the two models are consistent. They can agree and both still be wrong"
   },
   "timeline": [
     {

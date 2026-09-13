@@ -216,7 +216,7 @@ def test_the_agreement_rate_carries_its_caveat() -> None:
     """It is a consistency signal. The record has to say so, beside the number."""
     agreement = committed().agreement
     assert agreement["scenes"] == 17
-    assert "not an accuracy" in agreement["caveat"]
+    assert "both still be wrong" in agreement["caveat"]
     assert "ru-izard" in agreement["measured_on"]
 
 
@@ -331,7 +331,7 @@ def test_describe_names_the_two_models_and_the_agreement() -> None:
     assert "47 scenes" in out and "1s silence gap" in out
     assert "ruBERT" in out and "translate" in out
     assert "agree on 17 of 47" in out
-    assert "not an accuracy" in out
+    assert "both still be wrong" in out
 
 
 # --- what the chapter and the README publish ---------------------------------
@@ -377,7 +377,7 @@ def test_the_readme_quotes_the_record_it_was_built_from() -> None:
     assert f"| Segments | {report.raw['segments']} |" in readme
     assert f"| Scenes, at a 1s silence gap | {report.raw['scenes']} |" in readme
     assert f"{report.agreement['scenes']} ({float(report.agreement['share']):.1%})" in readme
-    # The line that must never be dropped: this is not an accuracy.
+    # The line that must never be dropped: agreement is not accuracy.
     assert "None of this is an accuracy" in readme
 
 
@@ -586,7 +586,7 @@ def test_the_committed_timeline_carries_the_valence_model_and_its_caveat() -> No
     block = committed().raw["valence_arousal"]
     assert block["name"] == "va-v1"
     assert block["improves_the_label"] is False
-    assert "display only" in block["caveat"]
+    assert "reference only" in block["caveat"]
 
 
 def test_the_committed_figure_is_current() -> None:

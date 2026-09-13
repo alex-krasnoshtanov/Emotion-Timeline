@@ -195,8 +195,8 @@ def test_the_committed_example_loads_with_no_gpu_and_no_network(client: TestClie
 
 def test_the_caveat_travels_with_the_agreement_rate(client: TestClient) -> None:
     payload = client.get("/api/demo").json()
-    assert "not an accuracy" in payload["header"]["agreement"]["caveat"]
-    assert "not an accuracy" in client.get("/api/meta").json()["caveat"]
+    assert "both still be wrong" in payload["header"]["agreement"]["caveat"]
+    assert "both still be wrong" in client.get("/api/meta").json()["caveat"]
 
 
 def test_asking_for_both_a_link_and_a_file_is_refused(client: TestClient, tmp_path: Path) -> None:
@@ -209,7 +209,7 @@ def test_asking_for_both_a_link_and_a_file_is_refused(client: TestClient, tmp_pa
             files={"file": ("clip.mp4", handle, "video/mp4")},
         )
     assert response.status_code == 400
-    assert "not both" in response.json()["detail"]
+    assert "only one of them" in response.json()["detail"]
 
 
 def test_asking_for_neither_is_refused(client: TestClient) -> None:
