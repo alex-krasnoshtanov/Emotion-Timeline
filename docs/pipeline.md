@@ -233,9 +233,23 @@ classifiers work, and the timeline comes back with the transcript beside it. It
 is the same code the commands run — `pipeline/score.py` is called by both, so the
 page and `timeline.csv` cannot drift apart.
 
-**It opens with no GPU and no network.** *Load the committed example* serves the
-47-scene timeline from `benchmarks/`, which is what makes the interface testable:
-`tests/test_web.py` exercises every route without a model on the machine.
+**It opens on a timeline rather than an empty form.** The committed 47-scene
+example is drawn on load, with no GPU, no network and nothing downloaded — which
+is also what makes the interface testable: `tests/test_web.py` exercises every
+route without a model on the machine. What is on screen always names itself, so
+the example cannot be read as a run of your own.
+
+**A run is something you can watch and stop.** Three named stages, the elapsed
+time measured on the server, and a button that stops it. Cancellation lands on
+the progress callback, because there is no polite place to return from inside
+one long call into faster-whisper — so a stopped run unwinds at its next line of
+output rather than ten minutes later. The job id goes in the URL, so reloading at
+minute eight reattaches to the run instead of losing it, and if the server goes
+away the page says so rather than sitting on its last state for ever.
+
+**The result comes away with you.** CSV and JSON download from what is on screen.
+Until this, the browser was the one surface that could run the pipeline and not
+give you the output.
 
 **It binds to loopback, and that is not a default to change casually.** The page
 hands a URL to yt-dlp and a file to ffmpeg, so anyone who can reach the port can
@@ -243,39 +257,14 @@ make this machine fetch a URL of their choosing. Three checks sit on that
 boundary — the link has to be `http`/`https`, the upload has to carry a media
 extension and stay under 512 MB, and the uploaded *filename is never used as a
 path*: the extension is taken and the name is generated. Each of those has a test
-named after the thing it refuses.
+named after the thing it refuses. The size limit is now checked in the browser as
+well, so a 600 MB file is refused before it is uploaded rather than after.
 
 The scene gap and the voice-activity filter are both on the page, because the
 [VAD finding](#the-voice-activity-filter-drops-narration-over-music) means the
-right setting depends on the recording.
-
-## The browser front end
-
-```bash
-uv sync --extra web --extra stt --extra model
-uv run emotion-timeline serve            # http://127.0.0.1:8000
-```
-
-A link or a file goes in the box, the page polls while Whisper and the two
-classifiers work, and the timeline comes back with the transcript beside it. It
-is the same code the commands run — `pipeline/score.py` is called by both, so the
-page and `timeline.csv` cannot drift apart.
-
-**It opens with no GPU and no network.** *Load the committed example* serves the
-47-scene timeline from `benchmarks/`, which is what makes the interface testable:
-`tests/test_web.py` exercises every route without a model on the machine.
-
-**It binds to loopback, and that is not a default to change casually.** The page
-hands a URL to yt-dlp and a file to ffmpeg, so anyone who can reach the port can
-make this machine fetch a URL of their choosing. Three checks sit on that
-boundary — the link has to be `http`/`https`, the upload has to carry a media
-extension and stay under 512 MB, and the uploaded *filename is never used as a
-path*: the extension is taken and the name is generated. Each of those has a test
-named after the thing it refuses.
-
-The scene gap and the voice-activity filter are both on the page, because the
-[VAD finding](#the-voice-activity-filter-drops-narration-over-music) means the
-right setting depends on the recording.
+right setting depends on the recording. Whatever this checkout cannot do — no
+ffmpeg on PATH, no valence checkpoint downloaded — the page says so on load
+instead of failing at the end of a run.
 
 ## What this does not establish
 

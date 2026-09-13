@@ -7,13 +7,15 @@
 <style>
   :root {
     --ink: #1d2427; --muted: #6b7a7d; --grid: #dde4e3; --line: #c9d4d3;
-    --bg: #f7f9f9; --card: #ffffff; --accent: #0d6a70; --wrong: #ab2f27;
-    --radius: 10px;
+    --bg: #f7f9f9; --card: #ffffff; --accent: #0d6a70; --on-accent: #ffffff;
+    --wrong: #ab2f27; --radius: 10px;
   }
   @media (prefers-color-scheme: dark) {
     :root {
       --ink: #e7edec; --muted: #93a3a4; --grid: #2b3536; --line: #384445;
-      --bg: #151b1c; --card: #1c2425; --accent: #4fb3b8;
+      --bg: #151b1c; --card: #1c2425; --accent: #4fb3b8; --on-accent: #10191a;
+      /* #ab2f27 is 2.4:1 on this card. The light red is 6.5:1. */
+      --wrong: #f08a80;
     }
   }
   * { box-sizing: border-box; }
@@ -34,36 +36,61 @@
     border: 1px solid var(--line); background: transparent; color: var(--muted);
     font: inherit; font-size: 0.9rem;
   }
-  .tabs button[aria-selected="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .tabs button[aria-selected="true"] {
+    background: var(--accent); border-color: var(--accent); color: var(--on-accent);
+  }
   label { display: block; font-size: 0.85rem; color: var(--muted); margin-bottom: 5px; }
   input[type=url], input[type=file], input[type=number] {
     width: 100%; padding: 9px 11px; font: inherit; color: var(--ink);
     background: var(--bg); border: 1px solid var(--line); border-radius: 7px;
   }
+  .drop { border: 1px dashed var(--line); border-radius: 7px; padding: 14px; }
+  .drop.over { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, transparent); }
+  .drop .chosen { font-size: 0.85rem; color: var(--ink); margin: 8px 0 0; }
   .options { display: flex; gap: 18px; flex-wrap: wrap; align-items: end; margin-top: 14px; }
   .options > div { flex: 0 1 160px; }
   .check { display: flex; align-items: center; gap: 7px; font-size: 0.88rem; color: var(--muted); }
   .check input { width: auto; }
+  .check input:disabled + span { opacity: 0.55; }
   .actions { display: flex; gap: 10px; align-items: center; margin-top: 18px; flex-wrap: wrap; }
   button.run, button.ghost {
     padding: 10px 20px; border-radius: 8px; font: inherit; font-weight: 600; cursor: pointer;
   }
-  button.run { background: var(--accent); color: #fff; border: 1px solid var(--accent); }
+  button.run { background: var(--accent); color: var(--on-accent); border: 1px solid var(--accent); }
   button.ghost { background: transparent; color: var(--accent); border: 1px solid var(--line); }
+  button.small { padding: 6px 13px; font-size: 0.85rem; border-radius: 7px; font-weight: 600;
+                 background: transparent; color: var(--accent); border: 1px solid var(--line);
+                 cursor: pointer; font-family: inherit; }
   button:disabled { opacity: 0.5; cursor: not-allowed; }
+  :where(button, input, a):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .note { font-size: 0.83rem; color: var(--muted); }
+  .note.warn { color: var(--wrong); }
   #status { margin-top: 18px; display: none; }
   #status.on { display: block; }
+  .headline { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
   .state { font-weight: 600; text-transform: capitalize; }
-  .state.failed { color: var(--wrong); }
+  .state.failed, .state.cancelled { color: var(--wrong); }
+  .elapsed { font-size: 0.85rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .steps { list-style: none; display: flex; flex-wrap: wrap; gap: 6px 22px;
+           margin: 12px 0 0; padding: 0; font-size: 0.86rem; color: var(--muted); }
+  .steps li { display: flex; align-items: center; gap: 7px; }
+  .steps .dot { width: 9px; height: 9px; border-radius: 50%; border: 1.5px solid var(--line); }
+  .steps .now { color: var(--ink); font-weight: 600; }
+  .steps .now .dot { border-color: var(--accent); background: var(--accent); }
+  .steps .done .dot { border-color: var(--accent); }
   pre.log {
-    margin: 10px 0 0; padding: 11px 13px; max-height: 190px; overflow: auto;
+    margin: 12px 0 0; padding: 11px 13px; max-height: 190px; overflow: auto;
     background: var(--bg); border: 1px solid var(--line); border-radius: 7px;
     font: 12px/1.5 ui-monospace, SFMono-Regular, Consolas, monospace; color: var(--muted);
     white-space: pre-wrap;
   }
   #results { display: none; }
   #results.on { display: block; }
+  .provenance { display: flex; justify-content: space-between; align-items: baseline;
+                gap: 14px; flex-wrap: wrap; margin: 0 0 14px; }
+  .provenance .what { font-size: 0.88rem; color: var(--muted); }
+  .provenance .what b { color: var(--ink); }
+  .downloads { display: flex; gap: 8px; }
   .stats { display: flex; flex-wrap: wrap; gap: 26px; margin-bottom: 8px; }
   .stat b { display: block; font-size: 1.35rem; font-variant-numeric: tabular-nums; }
   .stat span { font-size: 0.8rem; color: var(--muted); }
@@ -74,7 +101,7 @@
        text-transform: uppercase; letter-spacing: 0.05em; }
   td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
   .chip { display: inline-block; padding: 1px 9px; border-radius: 999px;
-          color: #fff; font-size: 0.78rem; font-weight: 600; }
+          font-size: 0.78rem; font-weight: 600; }
   .split { color: var(--muted); font-size: 0.8rem; }
   .caveat { border-left: 3px solid var(--accent); padding: 2px 0 2px 13px;
             color: var(--muted); font-size: 0.87rem; margin: 16px 0 0; max-width: 70ch; }
@@ -92,18 +119,24 @@
   </p>
 
   <div class="card">
-    <div class="tabs" role="tablist">
-      <button id="tab-link" role="tab" aria-selected="true">From a link</button>
-      <button id="tab-file" role="tab" aria-selected="false">From a file</button>
+    <div class="tabs" role="tablist" aria-label="Where the audio comes from">
+      <button id="tab-link" role="tab" aria-selected="true" aria-controls="pane-link"
+              tabindex="0">From a link</button>
+      <button id="tab-file" role="tab" aria-selected="false" aria-controls="pane-file"
+              tabindex="-1">From a file</button>
     </div>
 
-    <div id="pane-link">
+    <div id="pane-link" role="tabpanel" aria-labelledby="tab-link">
       <label for="url">Video or audio URL</label>
-      <input type="url" id="url" placeholder="https://www.youtube.com/watch?v=…" autocomplete="off">
+      <input type="url" id="url" placeholder="https://www.youtube.com/watch?v=&hellip;" autocomplete="off">
     </div>
-    <div id="pane-file" hidden>
+    <div id="pane-file" role="tabpanel" aria-labelledby="tab-file" hidden>
       <label for="file">Audio or video file</label>
-      <input type="file" id="file" accept="audio/*,video/*">
+      <div class="drop" id="drop">
+        <input type="file" id="file" accept="audio/*,video/*">
+        <p class="chosen" id="chosen" hidden></p>
+        <p class="note" id="file-note" style="margin:8px 0 0">&hellip; or drop one here.</p>
+      </div>
     </div>
 
     <div class="options">
@@ -111,32 +144,49 @@
         <label for="gap">Scene gap (s)</label>
         <input type="number" id="gap" value="1" min="0" max="60" step="0.5">
       </div>
-      <label class="check"><input type="checkbox" id="vad" checked> Voice-activity filter</label>
-      <label class="check"><input type="checkbox" id="valence"> Valence &amp; arousal</label>
+      <label class="check"><input type="checkbox" id="vad" checked> <span>Voice-activity filter</span></label>
+      <label class="check"><input type="checkbox" id="valence"> <span>Valence &amp; arousal</span></label>
     </div>
     <p class="note" id="valence-note" style="margin:8px 0 0"></p>
     <p class="note" style="margin:8px 0 0">
       The filter stops Whisper hallucinating over silence, and on a documentary with
       music under the narration it drops speech. Turn it off if the transcript has holes.
     </p>
+    <p class="note warn" id="unavailable" style="margin:8px 0 0" hidden></p>
 
     <div class="actions">
       <button class="run" id="run">Run the pipeline</button>
       <button class="ghost" id="demo">Load the committed example</button>
       <span class="note" id="hint">First run downloads the models &mdash; several minutes.</span>
     </div>
+    <p class="note err" id="form-error" style="margin:10px 0 0" hidden></p>
   </div>
 
   <div id="status" class="card">
-    <div>Status: <span class="state" id="state">queued</span> <span id="err" class="err"></span></div>
+    <div class="headline">
+      <p style="margin:0" id="live" role="status" aria-live="polite">
+        Status: <span class="state" id="state">queued</span><span id="at"></span>
+        <span id="err" class="err"></span>
+      </p>
+      <span class="elapsed" id="elapsed"></span>
+      <button class="small" id="cancel" hidden>Stop this run</button>
+    </div>
+    <ol class="steps" id="steps"></ol>
     <pre class="log" id="log"></pre>
   </div>
 
   <div id="results">
     <h2>The timeline</h2>
+    <div class="provenance">
+      <span class="what" id="provenance"></span>
+      <span class="downloads">
+        <button class="small" id="save-csv">Download CSV</button>
+        <button class="small" id="save-json">Download JSON</button>
+      </span>
+    </div>
     <div class="stats" id="stats"></div>
     <div class="scroll"><svg id="chart" width="1040" height="300" role="img"
-      aria-label="Emotion against wall-clock time"></svg></div>
+      aria-label="Emotion against wall-clock time; the same rows are in the table below."></svg></div>
     <p class="caveat" id="caveat"></p>
     <p class="caveat" id="va-caveat" hidden></p>
 
@@ -151,32 +201,214 @@
 <script>
 const $ = (id) => document.getElementById(id);
 const SVG = "http://www.w3.org/2000/svg";
-let META = null, POLL = null;
+const POLL_MS = 1000;
+// Localhost, one user, one job. Polling is the right size for that; the failure
+// this counts is the server going away, which used to leave the page frozen on
+// its last state with unhandled rejections piling up in the console.
+const GIVE_UP_AFTER = 5;
+
+let META = null, POLL = null, CURRENT = null, FAILURES = 0, SHOWN = null;
 
 const clock = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
+const esc = (s) => String(s).replace(/[<>&]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" }[c]));
 
-function setTab(which) {
+// White on #c98a1e is 2.9:1. Whichever of ink and paper reads better wins.
+function readable(hex) {
+  const parts = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255)
+    .map((v) => (v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4)));
+  const L = 0.2126 * parts[0] + 0.7152 * parts[1] + 0.0722 * parts[2];
+  return (L + 0.05) / 0.05 > 1.05 / (L + 0.05) ? "#10191a" : "#ffffff";
+}
+
+// --- the form ----------------------------------------------------------------
+
+function setTab(which, focus) {
   const link = which === "link";
-  $("tab-link").setAttribute("aria-selected", link);
-  $("tab-file").setAttribute("aria-selected", !link);
+  for (const [id, on] of [["tab-link", link], ["tab-file", !link]]) {
+    $(id).setAttribute("aria-selected", String(on));
+    $(id).tabIndex = on ? 0 : -1;
+    if (on && focus) $(id).focus();
+  }
   $("pane-link").hidden = !link;
   $("pane-file").hidden = link;
 }
 $("tab-link").onclick = () => setTab("link");
 $("tab-file").onclick = () => setTab("file");
+for (const id of ["tab-link", "tab-file"]) {
+  $(id).addEventListener("keydown", (event) => {
+    if (["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) {
+      event.preventDefault();
+      setTab(id === "tab-link" ? "file" : "link", true);
+    }
+  });
+}
+
+const drop = $("drop");
+for (const name of ["dragenter", "dragover"]) {
+  drop.addEventListener(name, (e) => { e.preventDefault(); drop.classList.add("over"); });
+}
+for (const name of ["dragleave", "drop"]) {
+  drop.addEventListener(name, (e) => { e.preventDefault(); drop.classList.remove("over"); });
+}
+drop.addEventListener("drop", (e) => {
+  if (e.dataTransfer.files.length) { $("file").files = e.dataTransfer.files; showChosen(); }
+});
+$("file").addEventListener("change", showChosen);
+
+function showChosen() {
+  const file = $("file").files[0];
+  $("chosen").hidden = !file;
+  if (file) $("chosen").textContent = `${file.name} — ${(file.size / 1e6).toFixed(1)} MB`;
+}
+
+function formError(message) {
+  $("form-error").hidden = !message;
+  $("form-error").textContent = message || "";
+}
+
+// --- the run -----------------------------------------------------------------
 
 function showStatus(on) { $("status").classList.toggle("on", on); }
 
+function stopPolling() {
+  if (POLL) clearInterval(POLL);
+  POLL = null;
+  $("run").disabled = false;
+  $("cancel").hidden = true;
+}
+
+function renderSteps(job) {
+  const stages = META.stages;
+  const at = stages.indexOf(job.stage);
+  $("steps").innerHTML = stages.map((name, i) => {
+    const done = job.state === "done" || (at >= 0 && i < at);
+    // A run that stopped or failed keeps its step marked, because where it got
+    // to is the useful part of the wreckage.
+    const now = i === at && job.state !== "done";
+    return `<li class="step ${done ? "done" : now ? "now" : "todo"}">
+      <span class="dot"></span>${esc(name)}</li>`;
+  }).join("");
+}
+
 function renderStatus(job) {
-  $("state").textContent = job.state;
+  $("state").textContent = job.stopping ? "stopping" : job.state;
   $("state").className = "state " + job.state;
-  $("err").textContent = job.error || "";
+  // Inside the live region, so a screen reader hears the three stage
+  // changes. The elapsed clock is deliberately outside it.
+  $("at").textContent = job.stage && !job.finished ? ` — ${job.stage}` : "";
+  $("err").textContent = job.error ? ` — ${job.error}` : "";
+  $("elapsed").textContent = job.elapsed_s ? `${clock(job.elapsed_s)} elapsed` : "";
+  $("cancel").hidden = job.finished || job.stopping;
+  renderSteps(job);
   $("log").textContent = job.log.join("\n");
   $("log").scrollTop = $("log").scrollHeight;
 }
 
+function lostContact(message) {
+  stopPolling();
+  $("state").textContent = "unreachable";
+  $("state").className = "state failed";
+  $("err").textContent = ` — ${message}`;
+  $("cancel").hidden = true;
+}
+
+async function poll(id) {
+  let job;
+  try {
+    const res = await fetch(`/api/jobs/${id}`);
+    if (res.status === 404) {
+      lostContact("the server has forgotten this run; it was probably restarted");
+      return;
+    }
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    job = await res.json();
+    FAILURES = 0;
+  } catch (error) {
+    FAILURES += 1;
+    if (FAILURES >= GIVE_UP_AFTER) {
+      lostContact("lost contact with the server — is `emotion-timeline serve` still running?");
+    }
+    return;
+  }
+  renderStatus(job);
+  if (!job.finished) return;
+  stopPolling();
+  if (job.state === "done") {
+    const out = await fetch(`/api/jobs/${id}/timeline`);
+    if (out.ok) show(await out.json(), `your ${job.kind === "file" ? "file" : "link"}`, job.source);
+  }
+}
+
+function attach(id) {
+  CURRENT = id;
+  FAILURES = 0;
+  location.hash = id;
+  showStatus(true);
+  $("run").disabled = true;
+  POLL = setInterval(() => poll(id), POLL_MS);
+  poll(id);
+}
+
+$("run").onclick = async () => {
+  formError("");
+  const isFile = $("tab-file").getAttribute("aria-selected") === "true";
+  const form = new FormData();
+  if (isFile) {
+    const file = $("file").files[0];
+    if (!file) { formError("Choose a file, or drop one on the box."); return; }
+    // Checked here as well as on the server, so a 600 MB file is refused before
+    // it is uploaded rather than after.
+    if (file.size > META.max_upload_bytes) {
+      formError(`That file is ${(file.size / 1e6).toFixed(0)} MB; the limit is `
+        + `${(META.max_upload_bytes / 1e6).toFixed(0)} MB.`);
+      return;
+    }
+    form.append("file", file);
+  } else {
+    if (!$("url").value.trim()) { formError("Paste a link, or switch to a file."); return; }
+    form.append("url", $("url").value);
+  }
+  form.append("gap", $("gap").value);
+  form.append("vad", $("vad").checked ? "true" : "false");
+  form.append("valence", $("valence").checked ? "true" : "false");
+
+  $("run").disabled = true;
+  $("results").classList.remove("on");
+  showStatus(true);
+  renderStatus({ state: "queued", stage: "", log: ["submitting"], error: null,
+                 finished: false, stopping: false, elapsed_s: 0 });
+
+  let job;
+  try {
+    const res = await fetch("/api/jobs", { method: "POST", body: form });
+    job = await res.json();
+    if (!res.ok) throw new Error(job.detail || "could not start");
+  } catch (error) {
+    showStatus(false);
+    formError(String(error.message || error));
+    $("run").disabled = false;
+    return;
+  }
+  attach(job.id);
+};
+
+$("cancel").onclick = async () => {
+  $("cancel").hidden = true;
+  $("state").textContent = "stopping";
+  await fetch(`/api/jobs/${CURRENT}`, { method: "DELETE" }).catch(() => {});
+  // It stops at its next report of progress, so the poll below is what
+  // actually reports the end of it.
+};
+
+// --- the result ---------------------------------------------------------------
+
 function stat(value, label) {
   return `<div class="stat"><b>${value}</b><span>${label}</span></div>`;
+}
+
+function chartWidth() {
+  const room = $("chart").parentElement.clientWidth;
+  return Math.max(720, room || 1040);
 }
 
 function renderChart(rows) {
@@ -184,9 +416,11 @@ function renderChart(rows) {
   svg.innerHTML = "";
   const emotions = META.emotions;
   const padL = 78, padR = 14, padT = 12, rowH = 26, stripH = 54;
-  const width = svg.viewBox.baseVal?.width || 1040;
-  const extra = rows.every((r) => typeof r.valence === "number") ? 26 : 0;
-  const height = padT + emotions.length * rowH + extra + stripH + 34;
+  const width = chartWidth();
+  const hasValence = rows.every((r) => typeof r.valence === "number");
+  const moodH = hasValence ? 26 : 0;
+  const height = padT + emotions.length * rowH + moodH + stripH + 34;
+  svg.setAttribute("width", width);
   svg.setAttribute("height", height);
   svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
 
@@ -194,14 +428,18 @@ function renderChart(rows) {
   const span = Math.max(end - start, 1);
   const x = (t) => padL + ((t - start) / span) * (width - padL - padR);
 
+  const label = (text, xAt, yAt, size) => {
+    const node = document.createElementNS(SVG, "text");
+    node.setAttribute("x", xAt); node.setAttribute("y", yAt);
+    node.setAttribute("text-anchor", "end"); node.setAttribute("font-size", size);
+    node.setAttribute("fill", "currentColor"); node.setAttribute("opacity", "0.65");
+    node.textContent = text;
+    svg.appendChild(node);
+  };
+
   emotions.forEach((name, i) => {
     const y = padT + i * rowH;
-    const label = document.createElementNS(SVG, "text");
-    label.setAttribute("x", padL - 10); label.setAttribute("y", y + rowH / 2 + 4);
-    label.setAttribute("text-anchor", "end"); label.setAttribute("font-size", "12");
-    label.setAttribute("fill", "currentColor"); label.setAttribute("opacity", "0.65");
-    label.textContent = name;
-    svg.appendChild(label);
+    label(name, padL - 10, y + rowH / 2 + 4, "12");
     const rule = document.createElementNS(SVG, "line");
     rule.setAttribute("x1", padL); rule.setAttribute("x2", width - padR);
     rule.setAttribute("y1", y + rowH / 2); rule.setAttribute("y2", y + rowH / 2);
@@ -212,14 +450,17 @@ function renderChart(rows) {
   rows.forEach((row) => {
     const i = emotions.indexOf(row.emotion);
     const bar = document.createElementNS(SVG, "rect");
-    const w = Math.max(x(row.end_s) - x(row.start_s), 2);
     bar.setAttribute("x", x(row.start_s));
     bar.setAttribute("y", padT + i * rowH + 4);
-    bar.setAttribute("width", w);
+    bar.setAttribute("width", Math.max(x(row.end_s) - x(row.start_s), 2));
     bar.setAttribute("height", rowH - 8);
     bar.setAttribute("rx", "2");
     bar.setAttribute("fill", META.colours[row.emotion]);
-    if (!row.agreed) { bar.setAttribute("opacity", "0.55"); bar.setAttribute("stroke", "#fff"); bar.setAttribute("stroke-dasharray", "3 2"); }
+    if (!row.agreed) {
+      bar.setAttribute("opacity", "0.55");
+      bar.setAttribute("stroke", "#fff");
+      bar.setAttribute("stroke-dasharray", "3 2");
+    }
     const title = document.createElementNS(SVG, "title");
     title.textContent = `${clock(row.start_s)} ${row.emotion} ${row.confidence.toFixed(3)}`
       + (row.agreed ? " (both models agree)" : ` (second opinion: ${row.second_opinion})`);
@@ -227,8 +468,6 @@ function renderChart(rows) {
     svg.appendChild(bar);
   });
 
-  const hasValence = rows.every((r) => typeof r.valence === "number");
-  const moodH = hasValence ? 26 : 0;
   if (hasValence) {
     const top = padT + emotions.length * rowH + 6;
     // Midpoint pinned at 0.5, not at this recording's own middle, so two
@@ -252,15 +491,7 @@ function renderChart(rows) {
       bar.appendChild(title);
       svg.appendChild(bar);
     });
-    const label = document.createElementNS(SVG, "text");
-    label.setAttribute("x", padL - 10);
-    label.setAttribute("y", top + (moodH - 8) / 2 + 4);
-    label.setAttribute("text-anchor", "end");
-    label.setAttribute("font-size", "11");
-    label.setAttribute("fill", "currentColor");
-    label.setAttribute("opacity", "0.65");
-    label.textContent = "valence";
-    svg.appendChild(label);
+    label("valence", padL - 10, top + (moodH - 8) / 2 + 4, "11");
   }
 
   const base = padT + emotions.length * rowH + moodH + stripH;
@@ -275,12 +506,7 @@ function renderChart(rows) {
     bar.setAttribute("opacity", "0.3");
     svg.appendChild(bar);
   });
-  const cap = document.createElementNS(SVG, "text");
-  cap.setAttribute("x", padL - 10); cap.setAttribute("y", base - 4);
-  cap.setAttribute("text-anchor", "end"); cap.setAttribute("font-size", "11");
-  cap.setAttribute("fill", "currentColor"); cap.setAttribute("opacity", "0.65");
-  cap.textContent = "confidence";
-  svg.appendChild(cap);
+  label("confidence", padL - 10, base - 4, "11");
 
   for (let k = 0; k <= 4; k++) {
     const t = start + (span * k) / 4;
@@ -293,10 +519,12 @@ function renderChart(rows) {
   }
 }
 
-function renderResult(payload) {
+function show(payload, what, source) {
+  SHOWN = { payload, what, source };
   const rows = payload.timeline, header = payload.header;
   const agreed = rows.filter((r) => r.agreed).length;
   const confs = rows.map((r) => r.confidence).sort((a, b) => a - b);
+  $("provenance").innerHTML = `<b>${esc(what)}</b> — ${esc(source || header.source || "")}`;
   $("stats").innerHTML =
     stat(rows.length, "scenes")
     + stat(clock(header.duration_s), "length")
@@ -311,77 +539,94 @@ function renderResult(payload) {
   if (va) {
     $("va-caveat").textContent =
       `Valence and arousal: ${va.citation}. ${va.caveat} `
-      + `Separation on held-out Russian \u2014 valence AUC ${va.valence_auc}, arousal AUC ${va.arousal_auc}.`;
+      + `Separation on held-out Russian — valence AUC ${va.valence_auc}, arousal AUC ${va.arousal_auc}.`;
   }
+  // Visible first: the chart measures its container, and a hidden one is 0 wide.
+  $("results").classList.add("on");
   renderChart(rows);
   $("rows").innerHTML = rows.map((r) => `
     <tr>
       <td class="num">${clock(r.start_s)}</td>
-      <td><span class="chip" style="background:${META.colours[r.emotion]}">${r.emotion}</span></td>
+      <td><span class="chip" style="background:${META.colours[r.emotion]};color:${readable(META.colours[r.emotion])}">${r.emotion}</span></td>
       <td class="num">${r.confidence.toFixed(3)}</td>
-      <td class="split">${r.agreed ? "agrees" : r.second_opinion + " &mdash; disagrees"}</td>
-      <td>${r.text ? r.text.replace(/[<>&]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" }[c])) : ""}</td>
+      <td class="split">${r.agreed ? "agrees" : esc(r.second_opinion) + " &mdash; disagrees"}</td>
+      <td>${r.text ? esc(r.text) : ""}</td>
     </tr>`).join("");
-  $("results").classList.add("on");
 }
 
-async function poll(id) {
-  const res = await fetch(`/api/jobs/${id}`);
-  const job = await res.json();
-  renderStatus(job);
-  if (!job.finished) return;
-  clearInterval(POLL); POLL = null;
-  $("run").disabled = false;
-  if (job.state === "done") {
-    const out = await fetch(`/api/jobs/${id}/timeline`);
-    renderResult(await out.json());
-  }
+// --- taking it away -----------------------------------------------------------
+
+function save(name, text, type) {
+  const url = URL.createObjectURL(new Blob([text], { type }));
+  const link = document.createElement("a");
+  link.href = url; link.download = name;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
 }
 
-$("run").onclick = async () => {
-  const form = new FormData();
-  const isFile = $("tab-file").getAttribute("aria-selected") === "true";
-  if (isFile) {
-    if (!$("file").files[0]) { alert("Choose a file first."); return; }
-    form.append("file", $("file").files[0]);
-  } else {
-    form.append("url", $("url").value);
-  }
-  form.append("gap", $("gap").value);
-  form.append("vad", $("vad").checked ? "true" : "false");
-  form.append("valence", $("valence").checked ? "true" : "false");
+function toCsv(rows) {
+  const first = rows[0];
+  const columns = Object.keys(first).filter((k) => k !== "text").concat(first.text ? ["text"] : []);
+  const cell = (value) => {
+    const text = value === null || value === undefined ? "" : String(value);
+    return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+  };
+  return [columns.join(","), ...rows.map((r) => columns.map((c) => cell(r[c])).join(","))].join("\n");
+}
 
-  $("run").disabled = true;
-  $("results").classList.remove("on");
-  showStatus(true);
-  renderStatus({ state: "queued", log: ["submitting"], error: null });
+const slug = () => (SHOWN?.what || "timeline").replace(/[^a-z0-9]+/gi, "-").toLowerCase();
+$("save-csv").onclick = () => save(`${slug()}.csv`, toCsv(SHOWN.payload.timeline), "text/csv");
+$("save-json").onclick = () =>
+  save(`${slug()}.json`, JSON.stringify(SHOWN.payload, null, 2), "application/json");
 
-  const res = await fetch("/api/jobs", { method: "POST", body: form });
-  const job = await res.json();
-  if (!res.ok) {
-    renderStatus({ state: "failed", log: [], error: job.detail || "could not start" });
-    $("run").disabled = false;
-    return;
-  }
-  renderStatus(job);
-  POLL = setInterval(() => poll(job.id), 1500);
-};
+$("demo").onclick = () => loadDemo();
 
-$("demo").onclick = async () => {
-  showStatus(false);
+async function loadDemo() {
   const res = await fetch("/api/demo");
-  if (!res.ok) { alert("No committed timeline in this checkout."); return; }
-  renderResult(await res.json());
-};
+  if (!res.ok) { formError("No committed timeline in this checkout."); return; }
+  const payload = await res.json();
+  show(payload, "the committed example", payload.header.source);
+}
+
+// --- what this checkout can actually do ---------------------------------------
 
 (async () => {
   META = await (await fetch("/api/meta")).json();
   $("gap").value = META.default_gap;
-  if (!META.demo_available) $("demo").disabled = true;
+  $("file").accept = META.media_suffixes.join(",");
+  $("file-note").textContent =
+    `… or drop one here. Up to ${(META.max_upload_bytes / 1e6).toFixed(0)} MB: `
+    + META.media_suffixes.join(" ") + ".";
+  $("demo").disabled = !META.demo_available;
   $("valence-note").textContent = META.valence_note
-    + (META.valence_available ? "" : " \u2014 unavailable: the checkpoint is not downloaded.");
+    + (META.valence_available ? "" : " — unavailable: the checkpoint is not downloaded.");
   $("valence").disabled = !META.valence_available;
+
+  const missing = [];
+  if (!META.ffmpeg_available) missing.push("ffmpeg is not on PATH, so links and files cannot be read");
+  if (!META.demo_available) missing.push("there is no committed timeline in this checkout");
+  $("unavailable").hidden = !missing.length;
+  $("unavailable").textContent = missing.length ? `Note: ${missing.join("; ")}.` : "";
+
+  // A run survives a reload: the id is in the URL and the server still has it.
+  const resuming = location.hash.slice(1);
+  if (resuming) {
+    const res = await fetch(`/api/jobs/${resuming}`);
+    if (res.ok) { attach(resuming); return; }
+    location.hash = "";
+  }
+  // Otherwise open on something worth reading rather than an empty form. It is
+  // a committed file: no GPU, no network, nothing downloaded.
+  if (META.demo_available) loadDemo();
 })();
+
+let RESIZING = null;
+addEventListener("resize", () => {
+  clearTimeout(RESIZING);
+  RESIZING = setTimeout(() => { if (SHOWN) renderChart(SHOWN.payload.timeline); }, 150);
+});
 </script>
 </body>
 </html>

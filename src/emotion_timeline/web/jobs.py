@@ -17,6 +17,7 @@ otherwise and a progress line arrives for every batch of a long transcription.
 from __future__ import annotations
 
 import threading
+import time
 import uuid
 from collections.abc import Iterator
 from dataclasses import dataclass, field
@@ -29,6 +30,20 @@ MAX_LOG_LINES = 400
 #: Finished jobs are kept so a reloaded page can still find its result.
 MAX_JOBS = 20
 
+#: The three things a run does, in order. The page draws one step per entry and
+#: the worker names them, so neither side invents its own list.
+STAGES: tuple[str, ...] = ("fetching audio", "transcribing", "scoring")
+
+
+class Cancelled(RuntimeError):
+    """Raised inside a worker thread when the browser has asked it to stop.
+
+    A transcription is one long call into faster-whisper, so there is no polite
+    place to return from. What there *is* is a progress callback, called once a
+    batch -- so :meth:`Job.say` raises this, and the run unwinds at its next
+    report rather than after another ten minutes of work nobody wants.
+    """
+
 
 class State(StrEnum):
     """Where a run has got to. A string enum so it serialises as its own name."""
@@ -37,10 +52,11 @@ class State(StrEnum):
     RUNNING = "running"
     DONE = "done"
     FAILED = "failed"
+    CANCELLED = "cancelled"
 
     @property
     def finished(self) -> bool:
-        return self in (State.DONE, State.FAILED)
+        return self in (State.DONE, State.FAILED, State.CANCELLED)
 
 
 @dataclass
@@ -51,29 +67,78 @@ class Job:
     source: str
     kind: str
     state: State = State.QUEUED
+    stage: str = ""
     log: list[str] = field(default_factory=list)
     error: str | None = None
     result: dict[str, Any] | None = None
+    started_at: float | None = None
+    finished_at: float | None = None
+    _stop: threading.Event = field(default_factory=threading.Event, repr=False)
 
     def say(self, message: str) -> None:
-        """Record a line of progress, dropping the oldest if the log is full."""
+        """Record a line of progress, dropping the oldest if the log is full.
+
+        Also the cancellation point -- see :class:`Cancelled` for why here.
+        """
+        self.check()
         self.log.append(message)
         if len(self.log) > MAX_LOG_LINES:
             # Keep the tail: the useful part of a long run is what it is doing
             # now, and the head is always the same three lines.
             del self.log[: len(self.log) - MAX_LOG_LINES]
 
+    def check(self) -> None:
+        """Stop here if the browser has asked to, and the run is still going."""
+        if self.stopping:
+            raise Cancelled
+
+    def enter(self, stage: str) -> None:
+        """Move to one of :data:`STAGES` and say so."""
+        self.stage = stage
+        self.say(stage)
+
+    def stop(self) -> bool:
+        """Ask the worker to give up. False if it had already finished."""
+        if self.state.finished:
+            return False
+        self._stop.set()
+        return True
+
+    @property
+    def stopping(self) -> bool:
+        """Asked to stop, and not yet stopped."""
+        return self._stop.is_set() and not self.state.finished
+
     def start(self) -> None:
         self.state = State.RUNNING
+        self.started_at = time.monotonic()
 
     def finish(self, result: dict[str, Any]) -> None:
-        self.state = State.DONE
+        self._end(State.DONE)
         self.result = result
 
     def fail(self, error: str) -> None:
-        self.state = State.FAILED
+        self._end(State.FAILED)
         # The browser shows this, so it has to be the message and not a stack.
         self.error = error.strip().splitlines()[-1] if error.strip() else "failed"
+
+    def cancelled(self) -> None:
+        # The stage is kept, not cleared: after stopping a run, where it got to
+        # is the one thing worth knowing about it.
+        self._end(State.CANCELLED)
+
+    def _end(self, state: State) -> None:
+        self.state = state
+        self.finished_at = time.monotonic()
+
+    @property
+    def elapsed_s(self) -> float:
+        """Seconds this run has been going, or took. Measured here, not in the
+        browser, because a reloaded page has no idea when it started."""
+        if self.started_at is None:
+            return 0.0
+        end = self.finished_at if self.finished_at is not None else time.monotonic()
+        return round(end - self.started_at, 1)
 
     def summary(self) -> dict[str, Any]:
         """What the polling endpoint returns. Never the whole timeline."""
@@ -82,7 +147,10 @@ class Job:
             "source": self.source,
             "kind": self.kind,
             "state": self.state.value,
+            "stage": self.stage,
+            "stopping": self.stopping,
             "finished": self.state.finished,
+            "elapsed_s": self.elapsed_s,
             "log": list(self.log),
             "error": self.error,
             "scenes": len(self.result["timeline"]) if self.result else 0,

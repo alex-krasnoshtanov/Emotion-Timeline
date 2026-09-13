@@ -33,7 +33,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from emotion_timeline import figures
 from emotion_timeline.pipeline import score as scoring
 from emotion_timeline.pipeline import timeline as pipeline
-from emotion_timeline.web.jobs import Job, JobStore
+from emotion_timeline.web.jobs import STAGES, Cancelled, Job, JobStore
 
 # FastAPI resolves route annotations at import time, so `UploadFile | None` has
 # to be a real name here rather than a forward reference to something imported
@@ -135,13 +135,17 @@ def run_job(  # pragma: no cover - downloads, transcribes and loads three models
 
     try:
         job.start()
-        job.say("fetching audio")
+        job.enter(STAGES[0])
         audio = transcribe.fetch_audio(str(upload) if upload else job.source, downloads)
-        job.say(f"transcribing with whisper {transcribe.MODEL}")
+
+        job.enter(STAGES[1])
+        job.say(f"whisper {transcribe.MODEL}")
         segments = transcribe.transcribe(audio, progress=job.say, vad=vad)
         if not segments:
             raise RuntimeError("the transcript came back empty; is there speech in this?")
         job.say(f"{len(segments):,} segments transcribed")
+
+        job.enter(STAGES[2])
         record = scoring.score(
             segments,
             source=job.source,
@@ -155,7 +159,8 @@ def run_job(  # pragma: no cover - downloads, transcribes and loads three models
                 "timeline": rows_with_text(record, segments),
             }
         )
-        job.say("done")
+    except Cancelled:
+        job.cancelled()
     except Exception as exc:
         job.fail(f"{type(exc).__name__}: {exc}")
     finally:
@@ -186,6 +191,12 @@ def build_app(downloads: str | Path = "downloads", store: JobStore | None = None
                 "caveat": scoring.AGREEMENT_CAVEAT,
                 "demo_available": pipeline.DEFAULT_TIMELINE.exists(),
                 "valence_available": VA_CHECKPOINT.exists(),
+                "stages": list(STAGES),
+                "max_upload_bytes": MAX_UPLOAD_BYTES,
+                "media_suffixes": sorted(MEDIA_SUFFIXES),
+                # The warning `serve` prints goes to a terminal the person using
+                # the page may never look at, so it is said here as well.
+                "ffmpeg_available": shutil.which("ffmpeg") is not None,
                 "valence_note": (
                     "Valence and arousal, from a published multilingual model. "
                     "Measured on held-out Russian to add nothing to the emotion "
@@ -262,6 +273,16 @@ def build_app(downloads: str | Path = "downloads", store: JobStore | None = None
         job = jobs.get(job_id)
         if job is None:
             raise HTTPException(404, "no such job; the server may have restarted")
+        return JSONResponse(job.summary())
+
+    @app.delete("/api/jobs/{job_id}")
+    def stop(job_id: str) -> JSONResponse:
+        """Ask a run to give up. It stops at its next report of progress."""
+        job = jobs.get(job_id)
+        if job is None:
+            raise HTTPException(404, "no such job; the server may have restarted")
+        if not job.stop():
+            raise HTTPException(409, f"that run had already {job.state.value}")
         return JSONResponse(job.summary())
 
     @app.get("/api/jobs/{job_id}/timeline")

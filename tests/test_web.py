@@ -10,6 +10,7 @@ ways they can be abused gets a named test.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any
 
@@ -314,3 +315,206 @@ def test_rows_carry_the_transcript_they_were_scored_from() -> None:
     rows = web.rows_with_text(report.raw, segments)
     assert len(rows) == len(report.scenes)
     assert rows[0]["text"].startswith("Козацкая")
+
+
+# --- a run that can be stopped ------------------------------------------------
+
+
+def test_a_job_stops_at_its_next_report_of_progress() -> None:
+    """There is no polite place to return from inside faster-whisper.
+
+    The progress callback is the one thing called often during a transcription,
+    so that is where cancellation lands -- which means a stopped run unwinds at
+    its next line of output rather than ten minutes later.
+    """
+    job = Job(id="x", source="s", kind="link")
+    job.start()
+    job.say("fetching audio")
+    assert job.stop() is True
+    assert job.stopping is True
+
+    with pytest.raises(job_module.Cancelled):
+        job.say("transcribing")
+    assert job.log == ["fetching audio"]
+
+
+def test_a_cancel_that_arrives_late_does_not_unfinish_a_run() -> None:
+    """`check` fires between stages, and a finished run has no stages left."""
+    job = Job(id="x", source="s", kind="link")
+    job.start()
+    job.finish({"timeline": [1, 2]})
+    assert job.stop() is False
+    job.check()
+    job.say("still fine")
+    assert job.state is State.DONE
+
+
+def test_a_stopped_run_says_so_rather_than_failing() -> None:
+    job = Job(id="x", source="s", kind="link")
+    job.start()
+    job.cancelled()
+    assert job.state is State.CANCELLED
+    assert job.state.finished
+    assert job.summary()["error"] is None
+
+
+def test_a_run_that_ends_badly_remembers_where_it_got_to() -> None:
+    """After stopping something, the useful part is which step it died on."""
+    stopped = Job(id="a", source="s", kind="link")
+    stopped.start()
+    stopped.enter(job_module.STAGES[1])
+    stopped.cancelled()
+    assert stopped.summary()["stage"] == job_module.STAGES[1]
+
+    broken = Job(id="b", source="s", kind="link")
+    broken.start()
+    broken.enter(job_module.STAGES[1])
+    broken.fail("RuntimeError: no speech in this")
+    assert broken.summary()["stage"] == job_module.STAGES[1]
+
+
+def test_a_run_reports_how_long_it_has_taken() -> None:
+    """The browser cannot work this out for itself after a reload."""
+    job = Job(id="x", source="s", kind="link")
+    assert job.elapsed_s == 0.0
+    job.start()
+    assert job.elapsed_s >= 0.0
+    job.finish({"timeline": []})
+    frozen = job.elapsed_s
+    assert job.elapsed_s == frozen
+
+
+def test_a_run_names_the_stage_the_page_draws() -> None:
+    job = Job(id="x", source="s", kind="link")
+    job.enter(job_module.STAGES[1])
+    assert job.summary()["stage"] == job_module.STAGES[1]
+    assert job.log == [job_module.STAGES[1]]
+
+
+def test_the_page_can_ask_a_run_to_stop(client: TestClient, store: JobStore) -> None:
+    job = store.create(source="s", kind="link")
+    job.start()
+    assert client.delete(f"/api/jobs/{job.id}").status_code == 200
+    assert job.stopping is True
+
+
+def test_stopping_a_finished_run_is_refused(client: TestClient, store: JobStore) -> None:
+    job = store.create(source="s", kind="link")
+    job.start()
+    job.finish({"timeline": []})
+    assert client.delete(f"/api/jobs/{job.id}").status_code == 409
+
+
+def test_stopping_a_run_that_is_gone_is_not_a_crash(client: TestClient) -> None:
+    assert client.delete("/api/jobs/nope").status_code == 404
+
+
+def test_meta_says_what_this_checkout_can_actually_do(client: TestClient) -> None:
+    """`serve` printed the ffmpeg warning to a terminal nobody was looking at."""
+    meta = client.get("/api/meta").json()
+    assert meta["stages"] == list(job_module.STAGES)
+    assert meta["max_upload_bytes"] == web.MAX_UPLOAD_BYTES
+    assert set(meta["media_suffixes"]) == set(web.MEDIA_SUFFIXES)
+    assert isinstance(meta["ffmpeg_available"], bool)
+
+
+# --- the page, which has no build step to catch any of this -------------------
+
+PAGE = (ROOT / "src" / "emotion_timeline" / "web" / "static" / "index.html").read_text(
+    encoding="utf-8"
+)
+
+
+def page_ids() -> set[str]:
+    return set(re.findall(r'\bid="([^"]+)"', PAGE))
+
+
+def test_every_element_the_script_reaches_for_exists() -> None:
+    """One typo in a `$("...")` is a silently dead control, and there is no build."""
+    wanted = set(re.findall(r'\$\("([^"]+)"\)', PAGE))
+    assert wanted <= page_ids(), sorted(wanted - page_ids())
+
+
+def test_every_aria_reference_points_at_something() -> None:
+    """A tablist whose aria-controls points nowhere announces tabs that are not."""
+    referenced: set[str] = set()
+    for attribute in ("aria-controls", "aria-labelledby", "for"):
+        referenced |= set(re.findall(rf'{attribute}="([^"]+)"', PAGE))
+    assert referenced <= page_ids(), sorted(referenced - page_ids())
+
+
+def test_every_colour_the_page_uses_is_defined_in_the_light_theme() -> None:
+    declared = set(re.findall(r"(--[a-z-]+):", PAGE))
+    used = set(re.findall(r"var\((--[a-z-]+)\)", PAGE))
+    assert used <= declared, sorted(used - declared)
+
+
+def test_the_dark_theme_redefines_every_colour() -> None:
+    """`--wrong` was the one token the dark block forgot: 2.4:1 on its own card."""
+    dark = PAGE[PAGE.index("prefers-color-scheme: dark") :]
+    dark = dark[: dark.index("* { box-sizing")]
+    light = PAGE[PAGE.index(":root {") : PAGE.index("prefers-color-scheme: dark")]
+    missing = set(re.findall(r"(--[a-z-]+):", light)) - set(re.findall(r"(--[a-z-]+):", dark))
+    assert missing == {"--radius"}, sorted(missing)
+
+
+def test_an_emotion_chip_has_a_readable_label_either_way() -> None:
+    """White on Joy's #c98a1e is 2.9:1, so the page picks per colour rather than
+    hard-coding one. This checks the palette supports that choice at all."""
+    from emotion_timeline.figures import EMOTION_COLOURS
+
+    def luminance(value: str) -> float:
+        parts = [int(value[i : i + 2], 16) / 255 for i in (1, 3, 5)]
+        linear = [c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4 for c in parts]
+        return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2]
+
+    for name, colour in EMOTION_COLOURS.items():
+        light = luminance(colour)
+        best = max((light + 0.05) / 0.05, 1.05 / (light + 0.05))
+        assert best >= 4.5, f"{name} {colour} reads at {best:.2f}:1 against both"
+
+    assert "readable(META.colours[r.emotion])" in PAGE
+
+
+def test_the_markup_closes_everything_it_opens() -> None:
+    """One unclosed <div> in a hand-written page is a layout nobody debugs."""
+    from html.parser import HTMLParser
+
+    void = {
+        "area",
+        "base",
+        "br",
+        "col",
+        "embed",
+        "hr",
+        "img",
+        "input",
+        "link",
+        "meta",
+        "source",
+        "track",
+        "wbr",
+    }
+
+    class Balance(HTMLParser):
+        def __init__(self) -> None:
+            super().__init__()
+            self.stack: list[str] = []
+            self.problems: list[str] = []
+
+        def handle_starttag(self, tag: str, attrs: object) -> None:
+            if tag not in void:
+                self.stack.append(tag)
+
+        def handle_endtag(self, tag: str) -> None:
+            if tag in void:
+                return
+            if not self.stack or self.stack[-1] != tag:
+                self.problems.append(f"</{tag}> closes {self.stack[-1:] or ['nothing']}")
+                return
+            self.stack.pop()
+
+    parser = Balance()
+    parser.feed(PAGE)
+    assert not parser.problems, parser.problems
+    assert parser.stack == [], parser.stack
