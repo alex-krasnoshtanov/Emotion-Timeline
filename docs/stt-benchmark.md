@@ -1,4 +1,4 @@
-# Which speech-to-text system
+# The transcriber: which system to trust
 
 Everything downstream reads a transcript, so this was the first thing to settle.
 Two systems transcribed the same 51-minute Russian-language documentary. Fluent
@@ -9,6 +9,10 @@ That hand annotation is the ground truth here. Nobody typed the audio out in
 full, so there is no reference transcript to align against and word error rate
 cannot be recovered by comparing two strings. It can only be recombined from the
 counts.
+
+```bash
+uv run emotion-timeline wer --window 0:00-18:09
+```
 
 ## The arithmetic
 
@@ -40,10 +44,6 @@ scored on the same quantity of speech.
 AssemblyAI makes roughly a quarter as many errors, and its errors are milder.
 Over half of Whisper's are deletions, which quietly lose content instead of
 corrupting it.
-
-```bash
-uv run emotion-timeline wer --window 0:00-18:09
-```
 
 ## The correction
 

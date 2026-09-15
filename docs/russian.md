@@ -1,4 +1,4 @@
-# Russian: translate, or classify it directly?
+# Russian: translate it, or classify it directly?
 
 The pipeline this project is named for reads Russian. Everything else here is
 trained on English. The original coursework settled it by judgement: there was

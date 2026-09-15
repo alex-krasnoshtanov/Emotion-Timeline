@@ -3,6 +3,10 @@
 **Turning a Russian-language video into a per-scene emotion timeline**, plus the
 dataset, model selection and error analysis that had to happen first.
 
+[![CI](https://github.com/alex-krasnoshtanov/Emotion-Timeline/actions/workflows/ci.yml/badge.svg)](https://github.com/alex-krasnoshtanov/Emotion-Timeline/actions/workflows/ci.yml)
+[![Python 3.12 | 3.13](https://img.shields.io/badge/python-3.12%20%7C%203.13-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+
 ![47 scenes over 52 minutes; the two models agree on 36% of them](assets/emotion-timeline.png)
 
 A real 51-minute Russian documentary, 316 transcript segments grouped into 47
@@ -10,10 +14,6 @@ scenes, each read by two models trained on different languages. The band is soli
 where the two agree and hatched where they split. With no labels on a documentary,
 where the two models disagree is about all a timeline can tell you about which
 parts of itself to believe.
-
-[![CI](https://github.com/alex-krasnoshtanov/Emotion-Timeline/actions/workflows/ci.yml/badge.svg)](https://github.com/alex-krasnoshtanov/Emotion-Timeline/actions/workflows/ci.yml)
-[![Python 3.12 | 3.13](https://img.shields.io/badge/python-3.12%20%7C%203.13-blue.svg)](https://www.python.org/downloads/)
-[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 Built for the **Content Intelligence Agency**, who make analytics tools for media
 producers. They wanted to know where the emotional beats of an episode fall. The
@@ -33,18 +33,20 @@ and which of the model's answers not to believe.
 
 ```mermaid
 flowchart TD
-    stt["<b>1. Which transcriber?</b><br/>Whisper vs AssemblyAI, scored by WER"]
+    stt["<b>1. Which transcriber?</b><br/>Whisper against AssemblyAI, scored by WER"]
     data["<b>2. What to train on?</b><br/>one public corpus, 552,821 rows in, 428,331 out"]
-    model["<b>3. What to train?</b><br/>nine families audited, then one fine-tuned"]
+    had["<b>3. What was already trained?</b><br/>nine families audited, two records that disagree"]
     err["<b>4. When is it wrong?</b><br/>error analysis over 64,250 predictions"]
-    xai["<b>5. How far does it hold?</b><br/>masking, against a real control"]
-    pipe["<b>6. The timeline</b><br/>transcript in, emotion timeline out"]
+    ours["<b>5. A model that exists</b><br/>the fine-tune, against the card it replaces"]
+    ru["<b>6. Does it work in Russian?</b><br/>translated or native, and what translation costs"]
+    pipe["<b>7. The timeline</b><br/>transcript in, emotion timeline out"]
 
-    stt --> data --> model --> err --> xai --> pipe
+    stt --> data --> had --> err --> ours --> ru --> pipe
 ```
 
-Each stage is a directory under `src/emotion_timeline/`, a chapter under `docs/`,
-and a command on the CLI.
+Every stage is a directory under `src/emotion_timeline/`, a chapter under
+`docs/`, and at least one command on the CLI. The sections below follow that
+order, and each one ends with a link to its chapter.
 
 ---
 
@@ -92,6 +94,21 @@ uv run emotion-timeline wer --window 0:00-18:09
 ```
 
 Full write-up: [`docs/stt-benchmark.md`](docs/stt-benchmark.md).
+
+### How the rate is recomputed
+
+The annotations are hand-counted per segment and the data holds no reference
+transcript, so WER cannot be derived by aligning two strings. It is recombined
+from the counts instead, which means the reference length has to be recovered:
+
+```
+N_ref = N_hypothesis + deletions − insertions
+WER   = (S + I + D) / N_ref
+```
+
+A deletion is a reference word the system dropped, so it is missing from the
+hypothesis and is added back; an insertion is the reverse. This is the one place
+the arithmetic is not obvious, and `tests/test_wer.py` pins it.
 
 ---
 
@@ -249,6 +266,56 @@ Three categories score exactly 0.0000 over 561 samples, where uniform guessing
 would land near one in seven.
 
 Full write-up: [`docs/model.md`](docs/model.md).
+
+---
+
+## Result: where the classifier fails
+
+Accuracy of **89.95%** over 64,250 held-out samples, and the interesting part is
+the 6,454 failures.
+
+![Error rate by class](assets/error-by-class.png)
+
+| Hardest class | Error rate | Support |
+| --- | --- | --- |
+| Neutral | 36.77% | 2,010 |
+| Fear | 24.87% | 8,003 |
+| Surprise | 22.68% | 2,372 |
+
+Difficulty mostly tracks rarity. The exception is Fear, which fails a quarter of
+the time on the third-largest class in the set. Its errors scatter across four
+neighbouring emotions instead of concentrating on one, which looks like genuine
+ambiguity rather than a shortage of data.
+
+Confidence separates cleanly on average, 0.887 when right against 0.428 when
+wrong, but **625 errors are made confidently**, 9.7% of them, and precisely the
+ones a confidence threshold will never catch.
+
+### The markers that make it worse
+
+![Three surface markers each take the error rate past 55%](assets/error-by-textual-feature.png)
+
+An exclamation mark, a question mark or a shouted word each take this classifier
+from roughly nine-in-ten right to worse than a coin flip. None of them is a
+semantic feature, and all three
+[replicate on the retrained model](docs/fine-tune.md).
+
+```bash
+uv run emotion-timeline errors
+```
+
+Full write-up: [`docs/error-analysis.md`](docs/error-analysis.md).
+
+### Where these figures come from
+
+The 64,250 per-sample predictions were not kept, so the charts are rendered from
+a committed summary rather than recomputed. That is weaker, so everything that
+can be cross-checked is: supports sum, errors sum, every rate matches its own
+numerator and denominator, and `emotion-timeline figures` refuses to draw
+anything if they do not. The strongest check is external. The model card, written
+separately for the same split, records per-class *recall* where this records
+per-class *error rate*, and the two agree to four decimal places across all seven
+classes.
 
 ---
 
@@ -471,73 +538,6 @@ Full chapter: [`docs/pipeline.md`](docs/pipeline.md).
 
 ---
 
-## Result: where the classifier fails
-
-Accuracy of **89.95%** over 64,250 held-out samples, and the interesting part is
-the 6,454 failures.
-
-![Error rate by class](assets/error-by-class.png)
-
-| Hardest class | Error rate | Support |
-| --- | --- | --- |
-| Neutral | 36.77% | 2,010 |
-| Fear | 24.87% | 8,003 |
-| Surprise | 22.68% | 2,372 |
-
-Difficulty mostly tracks rarity. The exception is Fear, which fails a quarter of
-the time on the third-largest class in the set. Its errors scatter across four
-neighbouring emotions instead of concentrating on one, which looks like genuine
-ambiguity rather than a shortage of data.
-
-Confidence separates cleanly on average, 0.887 when right against 0.428 when
-wrong, but **625 errors are made confidently**, 9.7% of them, and precisely the
-ones a confidence threshold will never catch.
-
-### The markers that make it worse
-
-![Three surface markers each take the error rate past 55%](assets/error-by-textual-feature.png)
-
-An exclamation mark, a question mark or a shouted word each take this classifier
-from roughly nine-in-ten right to worse than a coin flip. None of them is a
-semantic feature, and all three
-[replicate on the retrained model](docs/fine-tune.md).
-
-```bash
-uv run emotion-timeline errors
-```
-
-Full write-up: [`docs/error-analysis.md`](docs/error-analysis.md).
-
-### These figures come from recorded statistics, not raw predictions
-
-The 64,250 per-sample predictions were not kept, so the charts are rendered from
-a committed summary rather than recomputed. That is weaker, so everything that
-can be cross-checked is: supports sum, errors sum, every rate matches its own
-numerator and denominator, and `emotion-timeline figures` refuses to draw
-anything if they do not. The strongest check is external. The model card, written
-separately for the same split, records per-class *recall* where this records
-per-class *error rate*, and the two agree to four decimal places across all seven
-classes.
-
----
-
-## Why word error rate is recomputed and not aligned
-
-The annotations are hand-counted per segment and the data holds no reference
-transcript, so WER cannot be derived by aligning two strings. It is recombined
-from the counts instead, which means the reference length has to be recovered:
-
-```
-N_ref = N_hypothesis + deletions − insertions
-WER   = (S + I + D) / N_ref
-```
-
-A deletion is a reference word the system dropped, so it is missing from the
-hypothesis and is added back; an insertion is the reverse. This is the one place
-the arithmetic is not obvious, and `tests/test_wer.py` pins it.
-
----
-
 ## Quick start
 
 [uv](https://docs.astral.sh/uv/) is the shortest path in:
@@ -579,7 +579,7 @@ docker compose up          # http://127.0.0.1:8000, on the GPU, models in a volu
 on the CPU, which turns about a minute of work into several: the transcriber is
 most of the wall clock and it runs wherever the classifiers do. The kernels cover
 Turing through Blackwell, which is everything from a T4 to an RTX 50-series;
-[the pipeline chapter](docs/pipeline.md#which-cards-the-app-image-runs-on) lists
+[the pipeline chapter](docs/container.md#which-cards-the-app-image-runs-on) lists
 what they do not cover and what happens then.
 
 Both publish to loopback rather than to every interface, because the page hands
@@ -676,6 +676,7 @@ numbers from a command, and ends its chapter by saying what it does not establis
 | Russian, and what translation costs | `russian`, `compare-russian`, `translation-cost` | [russian.md](docs/russian.md) |
 | Valence and arousal, scored | `valence` | [valence.md](docs/valence.md) |
 | The timeline, on a real recording | `timeline`, `score-timeline`, `serve` | [pipeline.md](docs/pipeline.md) |
+| The two published images | `serve`, `preflight` | [container.md](docs/container.md) |
 
 **Still open.** The nine families rerun on one feature pipeline and one held-out
 split, which is the only thing that would repair the ranking withdrawn above. And

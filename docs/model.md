@@ -1,4 +1,4 @@
-# The model
+# The inherited model: two records that disagree
 
 Two records of the trained classifier survive, and they describe different
 models. The card claims DeBERTa-V2-Base evaluated single-label; the committed

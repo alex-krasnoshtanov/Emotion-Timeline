@@ -1,4 +1,4 @@
-# A model that exists
+# The fine-tune: a model that exists
 
 Every other chapter here audits a record whose artefact is gone. This one trains
 a classifier on the dataset [`dataset.md`](dataset.md) rebuilds, keeps everything

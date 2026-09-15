@@ -1,4 +1,4 @@
-# The dataset
+# The dataset: what it is made of, and what building it discarded
 
 No single public corpus covers seven emotions in television dialogue, which is
 the register this project needs rather than product reviews. This is how one was

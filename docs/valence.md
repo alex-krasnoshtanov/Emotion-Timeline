@@ -1,4 +1,4 @@
-# Valence and arousal: measured first, shown second
+# Valence and arousal: measured before being shown
 
 The original coursework ran a second model beside the classifier and used its
 **arousal** output as an "intensity" score, cut into five levels at 0.2 / 0.4 /

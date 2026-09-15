@@ -1,4 +1,4 @@
-# Where the classifier goes wrong
+# Error analysis: where the classifier goes wrong
 
 Accuracy of 89.95% over 64,250 held-out samples says almost nothing useful on its
 own. The 6,454 failures are not spread evenly, and the pattern in them is sharp
@@ -94,3 +94,20 @@ split, records per-class **recall**; this report records per-class **error rate*
 They are the same measurement from opposite directions, and they agree to four
 decimal places across all seven classes.
 `test_class_error_rates_match_the_model_card_recalls` asserts it.
+
+## What this does not establish
+
+- **Why the surface markers predict failure.** An 8.2x multiplier on ALL-CAPS is
+  a correlation over 4,040 samples. Whether the model keys on the typography
+  itself, or on whatever the typography tends to accompany, needs an experiment
+  that masks one and holds the other. [`fine-tune.md`](fine-tune.md) gets closer
+  by counting the marker in the cleaned text, and finds the inherited count was
+  measuring something else.
+- **That the recommendations work.** Four of them are listed and none is tested
+  here. Calibration is the only one this project went on to try, and it appears
+  in the pipeline as a temperature rather than as an improvement to this model.
+- **That the ellipsis row means anything.** Seven samples. It is here because
+  leaving it out would be selective.
+- **Anything about a different model.** These are the inherited classifier's
+  failures. [`fine-tune.md`](fine-tune.md) measures the same markers on a model
+  trained here, and they survive.

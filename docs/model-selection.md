@@ -1,4 +1,4 @@
-# Model selection
+# Model selection: a benchmark that compares nothing
 
 Nine model families were compared before the classifier was chosen. Two records
 of that comparison survive, they disagree about which family won, and the
