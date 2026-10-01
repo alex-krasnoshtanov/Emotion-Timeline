@@ -90,7 +90,7 @@ jobs:
       # Not conditional on the event: a pull request pushes nothing, but it
       # still wants to read the build cache rather than rebuild eight gigabytes.
       - name: Sign in to the registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
