@@ -75,7 +75,7 @@ jobs:
 
       - uses: docker/setup-qemu-action@v3
         if: contains(matrix.platforms, 'arm64')
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v4
 
       # `docker/metadata-action` lowercases the image name for us and a raw ref
       # in `cache-to` does not, so `Emotion-Timeline` would be rejected by the
